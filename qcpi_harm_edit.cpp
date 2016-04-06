@@ -44,7 +44,6 @@
 #include <fstream>
 #include <vector>
 #include <map>
-#include <list>
 #include <stdio.h>
 #include <cstdlib>
 #include <complex>
@@ -53,7 +52,6 @@
 #include <mpi.h>
 #include "error.h"
 #include <stdexcept>
-#include <sys/stat.h>
 #include <gsl/gsl_rng.h>
 
 using namespace std;
@@ -61,16 +59,19 @@ using namespace std;
 // file buffer size
 const int FLEN = 1024;
 
-// backup file types
+// EDIT NOTE: (delete)
+// backup file types 
 const char state_data_name[] = "coredata";
 const char state_data_ext[] = "bin";
 
+// EDIT NOTE: (delete)
 // filename prefix to control variation
 const char backup_prefix[] = "backup";
 const char checkpoint_prefix[] = "checkpoint";
 const char restart_prefix[] = "restart";
 
-// semi-constants (working in a.u.)
+// EDIT NOTE: (move to namespace and header)
+// semi-constants (working in a.u.) 
 const double kcal_to_hartree = 1.5936e-3; // For converting asymmetry to hartree
 const double kb = 3.1668114e-6;         // Boltzmann's constant for K to hartree
 const double tls_freq = 0.00016445;        // off-diagonal element of hamiltonian
@@ -81,11 +82,13 @@ const int DSTATES = 2;                  // number of DVR basis states
 complex<double> I(0.0,1.0);                // imaginary unit
 const long mc_buff = 10000;             // avg. steps per bath mode in MC
 
-// DVR eigenvals (fixed for now)
+// EDIT NOTE: (need to generalize)
+// DVR eigenvals (fixed for now) 
 const double dvr_left = 1.0;
 const double dvr_right = -1.0;
 
-// variables set in config file
+// EDIT NOTE: (eliminate dupe with data structs)
+// variables set in config file 
 double asym; // = 0.5 * kcal_to_hartree;    // system asymmetry
 int nmodes; // = 60;                  // number of hbath modes
 long steps; // = 50000;               // number of MC steps for IC equil (was 500k).
@@ -115,14 +118,19 @@ unsigned long block_seed_spacing;
 // Set to 1 to turn shifting on, and 0 to turn off
 int SHIFT; // = 1;
 
+// EDIT NOTE: Set up to run all H.O. analytic only
+
 // Flag to determine numerical/analytical
 // trajectory evaluation
 int ANALYTICFLAG; // = 0;
 
+// EDIT NOTE: (remove debug messages)
 // debugging flags
 int REPORT; // = 0;
 int TFLAG; // = 0;
 int RHOPRINT; // = 0;
+
+// EDIT NOTE: (Move data structs to header and clean up)
 
 // branching state enums
 
@@ -193,33 +201,6 @@ struct SimInfo
     char infile[FLEN];
     char outfile[FLEN];
     char backupname[FLEN];
-
-    // restart parameters
-
-    int ic_index;               // tracks starting IC for restart
-    int tstep_index;            // tracks timestep loop number for restart
-
-    bool checkpoint_flg;
-    bool plain_dump_flg;
-    bool dump_state_flg;
-    bool restart_flg;
-    bool first_flg;         
-    bool break_flg;
-    int check_freq;   
-    int plain_dump_freq;      
-    double time_buffer; 
-    double time_budget;  
-    double loop_start;          // holds timestamp for loop start
-    double loop_time;           // holds time for single loop iteration
-    double elapsed_time;        // holds current time spent for execution
-    double avg_loop_time;       // running average of loop time
-    double alpha; 
-};
-
-struct LoadInfo
-{
-    int ic_index;
-    int tstep_index;
 };
 
 struct FlagInfo
@@ -235,25 +216,7 @@ struct FlagInfo
     unsigned long block_seed_spacing;
 };
 
-struct BathPtr
-{
-    double * xvals;
-    double * pvals;
-    double * x_step;
-    double * p_step;
-};
-
-struct DensityPtr
-{
-    complex<double> ** rho_proc;
-    complex<double> * rho_ic_proc;
-    complex<double> ** rho_eacp_proc;
-
-    complex<double> ** rho_curr_checkpoint;
-    complex<double> ** rho_full_checkpoint;
-
-    Ref * old_ref_list;
-};
+// EDIT NOTES: (clean up function list and move to header)
 
 // startup and helper functions
 void startup(char *, struct SimInfo *, struct FlagInfo *, 
@@ -273,6 +236,7 @@ void calibrate_mc(double *, double *, double *, double *, gsl_rng *);
 double ic_gen(double *, double *, double *, double *, double *, double *, gsl_rng *);
 double dist(double, double, double, double, double, double);
 
+// EDIT NOTE: (Need to remove NR ODE functions and reimplement)
 // propagator integration
 void ho_update(Propagator &, Mode *, double);
 void ho_update_exact(Propagator &, Mode *, double);
@@ -301,36 +265,6 @@ void map_single(map<unsigned long long, unsigned> &,
 unsigned long long get_binary(Path &);
 unsigned long long get_binary(vector<unsigned> &, vector<unsigned> &);
 
-// plaintext checkpoint function
-
-void plaintext_out(complex<double> **, complex<double> **,
-    SimInfo &, int, int, MPI_Comm); 
-
-// functions to save state
-void save_state(BathPtr &, gsl_rng *, Propagator &, DensityPtr &,
-    vector<Path> &, Mode *, SimInfo &, FlagInfo &, char *, int);
-void write_bath(BathPtr &, SimInfo &, FILE *);
-void write_rng(gsl_rng *, FILE *);
-void write_prop(Propagator &, FILE *);
-void write_rho(DensityPtr &, SimInfo &, FILE *);
-void write_paths(vector<Path> &, FILE *);
-void write_modes(Mode *, SimInfo &, FILE *);
-void write_prog(SimInfo &, FlagInfo &, FILE *);
-bool file_exists(char * filename);
-
-// functions to load state
-void load_state(BathPtr &, gsl_rng *, Propagator &, DensityPtr &, 
-    vector<Path> &, Mode *, SimInfo &, int);
-void read_backup(BathPtr &, gsl_rng *, Propagator &, DensityPtr &, 
-    vector<Path> &, Mode *, SimInfo &, const char *, int);
-void read_bath(BathPtr &, FILE *);
-void read_rng(gsl_rng *, FILE *);
-void read_prop(Propagator &, FILE *);
-void read_rho(DensityPtr &, SimInfo &, FILE *);
-void read_paths(vector<Path> &, FILE *);
-void read_modes(Mode *, SimInfo &, FILE *);
-void read_prog(SimInfo &, FILE *);
-
 int main(int argc, char * argv[])
 {
     // initialize MPI
@@ -348,10 +282,10 @@ int main(int argc, char * argv[])
     // process arguments, format should be:
     //      mpirun -n <proc_num> ./prog_name <config_file> [restart]
 
-    if (argc < 2 || argc > 3)
+    if (argc < 2)
     {
         char errstr[FLEN];
-        sprintf(errstr, "Usage: %s <config_file> [restart]", argv[0]);
+        sprintf(errstr, "Usage: %s <config_file>", argv[0]);
         error->all(errstr);
     }
 
@@ -369,20 +303,6 @@ int main(int argc, char * argv[])
     startup(config_file, &simData, &flagData, w_comm);
 
     // check for restart state
-
-    if (argc == 3)
-    {
-        if (strcmp(argv[2], "restart") == 0)
-            simData.restart_flg = true;
-        else
-        {
-            char errstr[FLEN];
-            sprintf(errstr, "Unrecognized command line parameter: %s",
-                argv[2]);
-
-            error->all(errstr);
-        }
-    }
 
     // set global parameters from startup() output
 
@@ -425,12 +345,7 @@ int main(int argc, char * argv[])
 
     sprintf(simData.backupname, "%s", tmpfile);
 
-    simData.ic_index = 0;
-    simData.tstep_index = kmax;
-    simData.avg_loop_time = 0.0;
-    simData.first_flg = true;
-    simData.break_flg = false;
-
+    // EDIT NOTE: (these should be moved to startup function)
     // sanity checks
 
     if (kmax <= 0)
@@ -547,6 +462,8 @@ int main(int argc, char * argv[])
         fprintf(stdout, "\n");
     }
 
+    // EDIT NOTES: (enforce even division in code)
+
     // divide up ICs across procs
     // if IC num evenly divides, we just portion out
     // a block; otherwise we give remainder out block-cyclically
@@ -575,6 +492,7 @@ int main(int argc, char * argv[])
     double * x_step = new double [nmodes];
     double * p_step = new double [nmodes];
 
+    // EDIT NOTES: (get rid of blocking for clarity)
     // split global comm into blocked groups
 
     MPI_Comm block_comm;
@@ -652,6 +570,8 @@ int main(int argc, char * argv[])
     curr_prop.ptemp = new complex<double> [DSTATES*DSTATES];
     curr_prop.ham = new complex<double> [DSTATES*DSTATES];
 
+    // EDIT NOTES: (consider using small object/struct here)
+
     // allocate density matrix
 
     complex<double> ** rho_proc = new complex<double> * [qm_steps];
@@ -716,45 +636,6 @@ int main(int argc, char * argv[])
 
     // check for restart state
     
-    BathPtr bath_pointers;
-    DensityPtr density_pointers;
-
-    if (simData.restart_flg)
-    {
-        // set pointers
-
-        bath_pointers.xvals = xvals;
-        bath_pointers.pvals = pvals;
-        bath_pointers.x_step = x_step;
-        bath_pointers.p_step = p_step;
-
-        density_pointers.rho_proc = rho_proc;
-        density_pointers.rho_ic_proc = rho_ic_proc;
-        density_pointers.rho_eacp_proc = rho_eacp_proc;
-        density_pointers.rho_curr_checkpoint = rho_curr_checkpoint;
-        density_pointers.rho_full_checkpoint = rho_full_checkpoint;
-        density_pointers.old_ref_list = old_ref_list;
-
-        // load restart state from file
-
-        load_state(bath_pointers, gen, curr_prop, density_pointers, 
-            pathList, modes, simData, me);
-
-        // reset ref_modes values to ensure consistency
-    
-        for (int i = 0; i < nmodes; i++)
-        {
-            ref_modes[i].omega = modes[i].omega;
-            ref_modes[i].c = modes[i].c;
-        }
-
-    }
-
-    LoadInfo loadData;
-
-    loadData.ic_index = simData.ic_index;
-    loadData.tstep_index = simData.tstep_index;
-
     // Following loops are the core computational ones
 
     // Outer loop goes over initial conditions (selected by MC runs)
@@ -763,12 +644,10 @@ int main(int argc, char * argv[])
     // kmax, this does a full path sum, and for other points,
     // the iterative tensor propagation scheme is used
 
-    for (int ic_curr = loadData.ic_index; ic_curr < my_ics; ic_curr++)
+    for (int ic_curr = 0; ic_curr < my_ics; ic_curr++)
     {
       // only run t < kmax and build paths if we're not restarting
       
-      if (!simData.restart_flg)
-      {
 
         // zero per-proc rho(t)
 
@@ -828,6 +707,7 @@ int main(int argc, char * argv[])
 
         for (int seg = 0; seg < kmax; seg++)
         {
+            // EDIT NOTES: (this block seems good candidate for function)
             // grow path list vector with child paths
 
             for (unsigned path = 0; path < pathList.size(); path++)
@@ -873,6 +753,8 @@ int main(int argc, char * argv[])
             // note that ho_update clears ref_modes x(t) and p(t) list
 
             //ho_update(curr_prop, ref_modes, ho_ref_state);
+
+            // EDIT NOTES: (rename ho_update fns to something better)
 
             if (ANALYTICFLAG > 0)
                 ho_update_exact(curr_prop, ref_modes, ho_ref_state);
@@ -987,6 +869,7 @@ int main(int argc, char * argv[])
                 else
                     phi = action_calc(pathList[path], modes, ref_modes);
 
+                // EDIT NOTES: (block this into function)
                 // calculate proper rho contribution
 
                 unsigned size = pathList[path].fwd_path.size();
@@ -1006,6 +889,7 @@ int main(int argc, char * argv[])
                 pathList[path].eacp_prod *= curr_prop.prop[findex] *
                     conj(curr_prop.prop[bindex]);
 
+                // EDIT NOTES: (block into function)
                 // pull out density matrix at each time point
 
                 unsigned rindex = splus1*DSTATES + sminus1;
@@ -1037,6 +921,7 @@ int main(int argc, char * argv[])
                 old_ref_list[seg+1] = REF_RIGHT;
             }
 
+            // EDIT NOTES: (remove filtering functionality)
             // remove paths below thresh
 
             unsigned del_num = 0;
@@ -1077,17 +962,9 @@ int main(int argc, char * argv[])
                 tempList.clear();
             }
 
-            // !! BEGIN DEBUG !!
-/*
-            if (me == 0)
-            {
-                fprintf(stdout, "\nSeg %d, path list size: %zu\n",
-                    seg, pathList.size() );
-            }
-*/
-            // !! END DEBUG !!
-    
         } // end seg loop (full path phase)
+
+        // EDIT NOTES: (be more explicit about how this works?)
 
         // slide paths forward one step, i.e. (010) -> (10)
         // note that our system IC means we only
@@ -1109,7 +986,6 @@ int main(int argc, char * argv[])
             pathList[path].bwd_path.swap(tPath);
         }
 
-      } // end restart if clause
 
         // map paths to vector location
 
@@ -1118,15 +994,8 @@ int main(int argc, char * argv[])
         // loop over time points beyond kmax
         // and propagate system iteratively
 
-        for (int seg = loadData.tstep_index; seg < qm_steps; seg++)
+        for (int seg = kmax; seg < qm_steps; seg++)
         {
-            if (simData.dump_state_flg)
-            {
-                // get loop starting time
-
-                simData.loop_start = MPI_Wtime();
-            }
-
             // choose branch to propagate on stochastically,
             // based on state of system at start of memory span
 
@@ -1351,16 +1220,6 @@ int main(int argc, char * argv[])
                     pathList[path].active = false;
             }
 
-            // !! BEGIN DEBUG !!
-/*
-            if (me == 0)
-            {
-                fprintf(stdout, "In step %d, paths after filter: %zu\n",
-                    seg, pathList.size() );
-            }
-*/
-            // !! END DEBUG !!
-
             // do initial loop over paths to set up dependencies
 
             for (unsigned path = 0; path < pathList.size(); path++)
@@ -1485,16 +1344,6 @@ int main(int argc, char * argv[])
                 } // end turned-off search clause
 
             } // end dependency path loop
-
-            // !! BEGIN DEBUG !!
-/*
-            if (me == 0)
-            {
-                fprintf(stdout, "In step %d, paths after dependencies: %zu\n",
-                    seg, pathList.size() );
-            }
-*/
-            // !! END DEBUG !!
 
             // set up tempList to hold our matrix mult.
             // intermediates
@@ -1715,26 +1564,6 @@ int main(int argc, char * argv[])
             for (unsigned pos = 0; pos < pathList.size(); pos++)
                 pathList[pos].ic_vec.clear();
 
-
-            // !! BEGIN DEBUG !!
-/*
-            unsigned filtered_paths = 0;
-    
-            for (unsigned path = 0; path < pathList.size(); path++)
-            {
-                if (!pathList[path].active)
-                    filtered_paths++;
-            }
-
-            if (me == 0 && (seg % 10) == 0)
-            {
-                fprintf(stdout, "In step %d, paths after iteration (of %lu): %lu\n",
-                    seg, pathList.size(), pathList.size() - filtered_paths);
-            }
-*/
-            // !! END DEBUG !!
-
-
             // pull out current density matrix
 
             for (unsigned path = 0; path < pathList.size(); path++)
@@ -1765,174 +1594,7 @@ int main(int argc, char * argv[])
             for (unsigned path = 0; path < pathList.size(); path++)
                 pathList[path].active = true;
 
-            // check for state-saving directions
-
-            if (simData.dump_state_flg)
-            {
-                // find loop time
-
-                simData.loop_time = MPI_Wtime() - simData.loop_start;
-
-                // update exponential moving avg
-
-                if (simData.first_flg)
-                {
-                    // set avg to first time value if undefined
-
-                    simData.avg_loop_time = simData.loop_time;
-                    simData.first_flg = false;
-                }
-                else
-                {
-                    simData.avg_loop_time = 
-                        (simData.alpha * simData.loop_time) +
-                            (1.0 - simData.alpha) * simData.avg_loop_time;
-                }
-
-                // find total elapsed time to this point
-
-                simData.elapsed_time = MPI_Wtime() - start;
-
-                // check our time budget
-
-                double proj_time = simData.elapsed_time + 
-                    simData.avg_loop_time + simData.time_buffer;
-
-                // write restart if we estimate going over time
-
-                if (proj_time > simData.time_budget)
-                {                   
-                    // store loop indices so we restart correctly
-
-                    simData.ic_index = ic_curr;
-                    simData.tstep_index = seg + 1;
-
-                    // write out restart files
-
-                    char type_name[FLEN];
-
-                    sprintf(type_name, "%s_%s", restart_prefix, 
-                        simData.backupname);
-
-                    // copy over arrays to structures
-
-                    bath_pointers.xvals = xvals;
-                    bath_pointers.pvals = pvals;
-                    bath_pointers.x_step = x_step;
-                    bath_pointers.p_step = p_step;
-
-                    density_pointers.rho_proc = rho_proc;
-                    density_pointers.rho_ic_proc = rho_ic_proc;
-                    density_pointers.rho_eacp_proc = rho_eacp_proc;
-                    density_pointers.rho_curr_checkpoint = rho_curr_checkpoint;
-                    density_pointers.rho_full_checkpoint = rho_full_checkpoint;
-                    density_pointers.old_ref_list = old_ref_list;
-
-                    // write out program data
-
-                    save_state(bath_pointers, gen, curr_prop, density_pointers,
-                        pathList, modes, simData, flagData, type_name, me);
-
-                    // block until all procs have written to file
-
-                    MPI_Barrier(w_comm);  
-    
-                    // write confirmation message to outfile
-
-                    if (me == 0)
-                    {
-                        fprintf(outfile, 
-                            "Restart data written successfully\n\n");
-                    }
-
-                    // set flag to indicate restart write
-
-                    simData.break_flg = true;
-
-                    // break out of loop
-        
-                    break;
-
-                } // end save state clause
-
-            } // end dump_state clause
-
-            // break if flag is set
-
-            if (simData.break_flg)
-                break;
-            
-            if (simData.checkpoint_flg)
-            {
-                // write out data if at checkpoint
-
-                if ((seg % simData.check_freq) == 0)
-                {             
-                    // increment loop index so we restart correctly
-
-                    simData.ic_index = ic_curr;
-                    simData.tstep_index = seg + 1;
-
-                    // write plaintext summary file
-
-                    plaintext_out(rho_curr_checkpoint, rho_full_checkpoint,
-                        simData, ic_curr, seg, w_comm); 
-
-                    // write out checkpoint files
-            
-                    char type_name[FLEN];
-
-                    sprintf(type_name, "%s_%s", checkpoint_prefix, 
-                        simData.backupname);
-
-                    // copy over arrays to structures
-
-                    bath_pointers.xvals = xvals;
-                    bath_pointers.pvals = pvals;
-                    bath_pointers.x_step = x_step;
-                    bath_pointers.p_step = p_step;
-
-                    density_pointers.rho_proc = rho_proc;
-                    density_pointers.rho_ic_proc = rho_ic_proc;
-                    density_pointers.rho_eacp_proc = rho_eacp_proc;
-                    density_pointers.rho_curr_checkpoint = rho_curr_checkpoint;
-                    density_pointers.rho_full_checkpoint = rho_full_checkpoint;
-                    density_pointers.old_ref_list = old_ref_list;
-
-                    // write out program data
-
-                    save_state(bath_pointers, gen, curr_prop, density_pointers,
-                        pathList, modes, simData, flagData, type_name, me);
-                }
-
-            } // end checkpoint clause
-
-            if (simData.plain_dump_flg)
-            {
-                if ((seg % simData.plain_dump_freq) == 0)
-                {
-                    // write plaintext summary file
-
-                    plaintext_out(rho_curr_checkpoint, rho_full_checkpoint,
-                        simData, ic_curr, seg, w_comm); 
-                }
-
-            } // end plaintext dump clause
-
         } // end seg loop (iter. phase)
-
-        // break if flag is set
-
-        if (simData.break_flg)
-            break;
-
-        // turn off restart flag after first new IC
-
-        if (simData.restart_flg)
-        {
-            simData.restart_flg = false;
-            loadData.tstep_index = simData.kmax;
-        }
 
         // copy current run out to accumulated IC matrix
 
@@ -1953,6 +1615,8 @@ int main(int argc, char * argv[])
 
     MPI_Allreduce(&local_time, &g_runtime, 1, MPI_DOUBLE,
         MPI_MAX, w_comm);
+
+    // EDIT NOTES: (chunk MPI reduction into new functions)
 
     // collect real and imag parts of rho into separate
     // arrays for MPI communication
@@ -2124,97 +1788,6 @@ int main(int argc, char * argv[])
 
     // output summary
 
-    if (simData.break_flg)
-    {
-        // we're restarting, so only print partial summary
-
-        if (me == 0)
-        {
-            int repeat = 50;
-        
-            for (int i = 0; i < repeat; i++)
-                fprintf(outfile, "-");
-
-            fprintf(outfile, "\nTruncated Simulation Summary\n");
-
-            for (int i = 0; i < repeat; i++)
-                fprintf(outfile, "-");
-
-            fprintf(outfile, "\n\n");
-
-            fprintf(outfile, "Quantum steps: %d\n", qm_steps);
-            fprintf(outfile, "Memory length (kmax): %d\n", kmax);
-            fprintf(outfile, "Filtering threshold: %.3e\n", filter_thresh);
-            fprintf(outfile, "Step length (a.u): %.5f\n", dt);
-            fprintf(outfile, "IC num: %d\n", ic_tot);
-            fprintf(outfile, "RNG seed: %lu\n", seed);
-            fprintf(outfile, "MC skip: %ld\n", steps);
-
-            if (ANALYTICFLAG > 0)
-                fprintf(outfile, "Analytic trajectory integration: on\n");
-            else
-            {
-                fprintf(outfile, "Analytic trajectory integration: off\n");
-                fprintf(outfile, "Action integration points (per step): %d\n", step_pts);
-            }
-
-            if (simData.fixed_ref)
-                fprintf(outfile, "Simulation used EACP reference fixed at point: %.4f\n", 
-                    simData.ref_state);
-            else
-                fprintf(outfile, "Simulation used EACP reference hopping\n");
-
-            fprintf(outfile, "Input spectral density: %s\n", simData.infile);
-            fprintf(outfile, "Configuration file: %s\n\n", config_file);
-
-            fprintf(outfile, "Total simulated time (a.u.): %.4f\n", qm_steps*dt);
-            fprintf(outfile, "Current simulated time (a.u.): %.4f\n", simData.tstep_index*dt);
-            fprintf(outfile, "Processors: %d\n\n", nprocs);
-
-            fprintf(outfile, "Total simulation time: %.3f min\n\n", g_runtime/60.0);
-
-            for (int i = 0; i < repeat; i++)
-                fprintf(outfile, "-");
-
-            fprintf(outfile, "\nBath Summary\n");
-
-            for (int i = 0; i < repeat; i++)
-                fprintf(outfile, "-");
-
-            fprintf(outfile, "\n\n");
-
-            fprintf(outfile, "Bath modes: %d\n", nmodes);
-            fprintf(outfile, "Bath temperature: %.2f\n", bath_temp);
-            fprintf(outfile, "Inverse temperature: %.4f\n", beta);
-            fprintf(outfile, "Bath mode mass parameter: %.3f\n", mass);
-        
-            if (SHIFT)
-                fprintf(outfile, "Using shifted W(x,p) (minimum at x=lambda)\n\n");
-            else
-                fprintf(outfile, "Using unshifted W(x,p) (minimum at x=0)\n\n");
-
-            for (int i = 0; i < repeat; i++)
-                fprintf(outfile, "-");
-
-            fprintf(outfile, "\nSystem Summary\n");
-
-            for (int i = 0; i < repeat; i++)
-                fprintf(outfile, "-");
-
-            fprintf(outfile, "\n\n");
-
-            fprintf(outfile, "Off-diagonal TLS element: %f\n", tls_freq);
-            fprintf(outfile, "Asymmetry: %.7e hartree\n", asym);
-            fprintf(outfile, "Left DVR state: %.3f\n", dvr_left);
-            fprintf(outfile, "Right DVR state: %.3f\n\n", dvr_right);
-
-            fprintf(outfile, "End of restart-dumped data.\n");
-            fprintf(outfile, "Use restart command line option to continue simulation.\n\n");
-
-        } // end restart info summary
-    }
-    else
-    {
       // no restart, so print full output
 
       if (me == 0)
@@ -2397,8 +1970,6 @@ int main(int argc, char * argv[])
 
       } // end output conditional
 
-    } // end restart output check
-
     delete [] omega;
     delete [] jvals;
     delete [] bath_freq;
@@ -2451,6 +2022,7 @@ int main(int argc, char * argv[])
 
 /*----------------------------------------------------------------------*/
 
+// EDIT NOTES: (get rid of LAMMPS-based tokenizing)
 // startup() -- read in and process configuration file 
 
 void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag, 
@@ -2481,15 +2053,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
     sim->chunks = 5;                // must evenly divide step_pts
     sim->rho_steps = 100;            // points used to integrate U(t)
     sim->block_num = 1;                // number of blocks in final average
-
-    sim->checkpoint_flg = false;
-    sim->plain_dump_flg = false;
-    sim->dump_state_flg = false;
-    sim->restart_flg = false;
-    sim->check_freq = 200;          // checkpoint every 200 steps
-    sim->plain_dump_freq = 100;     // dump plaintext output every 100 steps 
-    sim->time_buffer = 20*60.0;     // 20 minute default buffer  
-    sim->alpha = 0.3; 
 
     // note that original definitions use integer
     // flags, which is why these are ints and not bool
@@ -2592,81 +2155,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
         {
             sprintf(sim->outfile, "%s", arg2);
             outflg = true;
-        }
-
-        else if (strcmp(arg1, "checkpoints") == 0)
-        {
-            if (strcmp(arg2, "on") == 0)
-                sim->checkpoint_flg = true;
-            else if (strcmp(arg2, "off") == 0)
-                sim->checkpoint_flg = false;
-            else
-                error->all("Unrecognized checkpointing option");
-        }
-
-        else if (strcmp(arg1, "check_freq") == 0)
-        {
-            sim->check_freq = atoi(arg2);
-        }
-/* ----------------- */
-
-        else if (strcmp(arg1, "plain_dump") == 0)
-        {
-            if (strcmp(arg2, "on") == 0)
-                sim->plain_dump_flg = true;
-            else if (strcmp(arg2, "off") == 0)
-                sim->plain_dump_flg = false;
-            else
-                error->all("Unrecognized plaintext dump option");
-        }
-
-        else if (strcmp(arg1, "plain_dump_freq") == 0)
-        {
-            sim->plain_dump_freq = atoi(arg2);
-        }
-
-/* ----------------- */
-
-        else if (strcmp(arg1, "dump_state") == 0)
-        {
-            if (strcmp(arg2, "on") == 0)
-                sim->dump_state_flg = true;
-            else if (strcmp(arg2, "off") == 0)
-                sim->dump_state_flg = false;
-            else
-                error->all("Unrecognized state-saving option");
-
-            dump_stateflg = true;
-        }
-
-        else if (strcmp(arg1, "time_budget") == 0)
-        {
-            // time is in hh:mm:ss format (must include all terms)
-            // i.e. 30 minutes would be 00:30:00
-
-            int hrs = atoi(strtok(arg2, ":"));
-            int mins = atoi(strtok(NULL, ":"));
-            int secs = atoi(strtok(NULL, ":"));
-
-            // store wall time in seconds
-
-            sim->time_budget = (hrs*3600.0 + mins*60.0 + secs); 
-
-            time_budgetflg = true;
-        }
-
-        else if (strcmp(arg1, "time_buffer") == 0)
-        {
-            // time is in hh:mm:ss format (must include all terms)
-            // i.e. 30 minutes would be 00:30:00
-
-            int hrs = atoi(strtok(arg2, ":"));
-            int mins = atoi(strtok(NULL, ":"));
-            int secs = atoi(strtok(NULL, ":"));
-
-            // store wall time in seconds
-
-            sim->time_buffer = (hrs*3600.0 + mins*60.0 + secs); 
         }
 
         else if (strcmp(arg1, "block_num") == 0)
@@ -2914,9 +2402,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
 
     if (sim->filter_thresh < 0)
         error->all("Filtering threshold can't be negative");
-
-    if (dump_stateflg && sim->time_buffer < 0)
-        error->all("Backup dump buffer time can't be negative");
 
     // ensure kmax < total steps
 
@@ -3645,15 +3130,6 @@ void build_ham(Propagator & prop, Mode * modes, int chunk)
         energy += 0.5*mass*wsquare*x*x;
     }
 
-/*
-    bath_mat[0] = left_sum + energy;
-    bath_mat[1] = 0.0;
-    bath_mat[2] = 0.0;
-    bath_mat[3] = right_sum + energy;
-*/
-
-    // !! BEGIN DEBUG !!
-
     // Removing energy term to see if this is
     // dominating energy gap and causing issues
 
@@ -3661,8 +3137,6 @@ void build_ham(Propagator & prop, Mode * modes, int chunk)
     bath_mat[1] = 0.0;
     bath_mat[2] = 0.0;
     bath_mat[3] = right_sum;
-
-    // !! END DEBUG !!
 
     // total hamiltonian is sum of system and system-bath parts
 
@@ -3726,15 +3200,6 @@ void build_ham_exact(Propagator & prop, Mode * modes)
         energy += 0.5*mass*wsquare*x*x;
     }
 
-/*
-    bath_mat[0] = left_sum + energy;
-    bath_mat[1] = 0.0;
-    bath_mat[2] = 0.0;
-    bath_mat[3] = right_sum + energy;
-*/
-
-    // !! BEGIN DEBUG !!
-
     // Removing energy term to see if this is
     // dominating energy gap and causing issues
 
@@ -3742,8 +3207,6 @@ void build_ham_exact(Propagator & prop, Mode * modes)
     bath_mat[1] = 0.0;
     bath_mat[2] = 0.0;
     bath_mat[3] = right_sum;
-
-    // !! END DEBUG !!
 
     // total hamiltonian is sum of system and system-bath parts
 
@@ -4302,1716 +3765,6 @@ unsigned long long get_binary(vector<unsigned> & fwd, vector<unsigned> & bwd)
     }
 
     return sum;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// plaintext_out() -- function which writes out progress in finding rho(t)
-// up to current checkpoint. This is designed to maximize useful info
-// obtained from a run, even in case of catastrophic failure 
-
-void plaintext_out(complex<double> ** rho_curr_checkpoint, 
-    complex<double> ** rho_full_checkpoint, SimInfo & simData, 
-        int ic_curr, int tstep, MPI_Comm comm)
-{
-    // get MPI info
-
-    int me, nprocs;
-
-    MPI_Comm_rank(comm, &me);
-    MPI_Comm_size(comm, &nprocs);
-
-    // open file to write out
-
-    FILE * saveFile;
-    char saveName[FLEN];
-    int error_flg = 0;
-
-    sprintf(saveName, "%s_plain_out_step_%d.dat", simData.backupname, tstep);
-
-    if (me == 0)
-    { 
-        if (file_exists(saveName))
-        {
-            // move file to backup copy if it already exists
-
-            int sys_val;
-            char sys_cmd[FLEN];
-
-            sprintf(sys_cmd, "mv %s %s_%s", 
-                saveName, backup_prefix, saveName);
-
-            sys_val = system(sys_cmd);
-
-            // warn on backup failure
-
-            if (sys_val)
-            {
-                fprintf(stdout, "WARNING: Could not backup data file %s\n",
-                    saveName);
-            }
-        }
-
-        saveFile = fopen(saveName, "w");
-
-        // warn if we can't open the save file and exit function
-
-        if (saveFile == NULL)
-        {
-            fprintf(stdout, "WARNING: Could not open file %s for plain-text dump!\n",
-                saveName);
-
-            error_flg = 1;
-        }
-    }
-
-    // check file status and exit on failure
-
-    int kill_flg;
-
-    MPI_Allreduce(&error_flg, &kill_flg, 1, MPI_INT, MPI_SUM, comm);
-
-    if (kill_flg > 0)
-        return;
-
-    // print message on organization for clarity
-
-    if (me == 0)
-    {
-        fprintf(saveFile, 
-            "Columns are flattened rho(t) elements\n");
-
-        fprintf(saveFile, 
-            "Each of the %d pairs is ordered by Re(rho(t)) Im(rho(t))\n\n", 
-                DSTATES*DSTATES);
-    }
-
-    // find total completed ICs across procs
-
-    int finished_ics;
-
-    MPI_Allreduce(&ic_curr, &finished_ics, 1, MPI_INT, MPI_SUM, comm);
-
-    // print total and running rho(t) values to file
-
-    double * rho_real_proc = new double [qm_steps*DSTATES*DSTATES];
-    double * rho_imag_proc = new double [qm_steps*DSTATES*DSTATES];
-
-    double * rho_real = new double [qm_steps*DSTATES*DSTATES];
-    double * rho_imag = new double [qm_steps*DSTATES*DSTATES];
-
-    // determine which data to print
-
-    if (finished_ics == 0)
-    {
-        // No completed ICs, print short message
-        
-        if (me == 0)
-            fprintf(saveFile, 
-                "No ICs finished, only running summary will be printed\n\n");
-    }
-    else
-    {
-        // reduce full IC matrix across procs and normalize
-
-        for (int i = 0; i < qm_steps; i++)
-        {
-            for (int j = 0; j < DSTATES*DSTATES; j++)
-            {
-                rho_real_proc[i*DSTATES*DSTATES+j] = 
-                    rho_full_checkpoint[i][j].real();
-
-                rho_imag_proc[i*DSTATES*DSTATES+j] = 
-                    rho_full_checkpoint[i][j].imag();
-
-                rho_real[i*DSTATES*DSTATES+j] = 0.0;
-                rho_imag[i*DSTATES*DSTATES+j] = 0.0;
-            }
-        }
-
-        // Allreduce the real and imaginary arrays
-
-        MPI_Allreduce(rho_real_proc, rho_real, qm_steps*DSTATES*DSTATES,
-            MPI_DOUBLE, MPI_SUM, comm);
-
-        MPI_Allreduce(rho_imag_proc, rho_imag, qm_steps*DSTATES*DSTATES,
-            MPI_DOUBLE, MPI_SUM, comm);
-
-        // scale arrays by ICs completed
-
-        for (int i = 0; i < qm_steps; i++)
-        {
-            for (int j = 0; j < DSTATES*DSTATES; j++)
-            {
-                rho_real[i*DSTATES*DSTATES+j] /= finished_ics;
-                rho_imag[i*DSTATES*DSTATES+j] /= finished_ics;
-            }
-        }
-
-        // print to output file
-        
-        if (me == 0)
-        {
-            fprintf(saveFile, "Density matrix averaged over %d ICs (real and imag):\n\n",
-                finished_ics);
-
-            for (int i = 0; i < qm_steps; i++)
-            {   
-                fprintf(saveFile, "%.4f ", simData.dt*(i+1) );
-
-                for (int j = 0; j < DSTATES*DSTATES; j++)
-                {
-                    fprintf(saveFile, "%13.10f %13.10f ", rho_real[i*DSTATES*DSTATES+j],
-                        rho_imag[i*DSTATES*DSTATES+j]);
-                }
-
-                fprintf(saveFile, "\n");
-
-            } // end printing loop (proc 0)
-
-            fprintf(saveFile, "\n");
-
-        } // end printing if clause  
-
-    } // end total rho(t) printing
- 
-    // locate first zero in current rho(t)
-/*
-    int min_step = 0;
-    double epsilon = 1e-6;
-
-    while ( abs(rho_curr_checkpoint[min_step][0]) > epsilon && 
-        min_step < qm_steps )
-    {
-        min_step++;
-    }
-
-    // find global minimum step
-
-    int global_min = qm_steps;
-
-    MPI_Allreduce(&min_step, &global_min, 1, MPI_INT, MPI_MIN, comm);
-*/
-    // reduce current rho(t) array
-
-    for (int i = 0; i < qm_steps; i++)
-    {
-        for (int j = 0; j < DSTATES*DSTATES; j++)
-        {
-            rho_real_proc[i*DSTATES*DSTATES+j] = 
-                rho_curr_checkpoint[i][j].real();
-
-            rho_imag_proc[i*DSTATES*DSTATES+j] = 
-                rho_curr_checkpoint[i][j].imag();
-
-            rho_real[i*DSTATES*DSTATES+j] = 0.0;
-            rho_imag[i*DSTATES*DSTATES+j] = 0.0;
-        }
-    }
-
-    // Allreduce the real and imaginary arrays
-
-    MPI_Allreduce(rho_real_proc, rho_real, qm_steps*DSTATES*DSTATES,
-        MPI_DOUBLE, MPI_SUM, comm);
-
-    MPI_Allreduce(rho_imag_proc, rho_imag, qm_steps*DSTATES*DSTATES,
-        MPI_DOUBLE, MPI_SUM, comm);
-
-    // scale arrays by nprocs to average
-
-    for (int i = 0; i < qm_steps; i++)
-    {
-        for (int j = 0; j < DSTATES*DSTATES; j++)
-        {
-            rho_real[i*DSTATES*DSTATES+j] /= nprocs;
-            rho_imag[i*DSTATES*DSTATES+j] /= nprocs;
-        }
-    }
-
-    // print current rho(t) array to file
-
-    if (me == 0)
-    {
-        fprintf(saveFile, "Current density matrix averaged over %d procs (real and imag):\n\n",
-            nprocs);
-
-        //for (int i = 0; i < global_min; i++)
-        for (int i = 0; i < tstep; i++)
-        {   
-            fprintf(saveFile, "%.4f ", simData.dt*(i+1) );
-
-            for (int j = 0; j < DSTATES*DSTATES; j++)
-            {
-                fprintf(saveFile, "%13.10f %13.10f ", rho_real[i*DSTATES*DSTATES+j],
-                    rho_imag[i*DSTATES*DSTATES+j]);
-            }
-
-            fprintf(saveFile, "\n");
-
-        } // end printing loop (proc 0)
-
-        fprintf(saveFile, "\n");
-
-    } // end printing if clause 
-
-    // cleanup
-
-    if (me == 0)
-        fclose(saveFile);
-
-    delete [] rho_real_proc;
-    delete [] rho_imag_proc;
-    
-    delete [] rho_real;
-    delete [] rho_imag;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// save_state() -- general top-level function to control the binary backup
-// process for checkpointing and restart file writing
-
-void save_state(BathPtr & bath_pointers, gsl_rng * gen, Propagator & curr_prop, 
-    DensityPtr & density_pointers, vector<Path> & pList, Mode * mList, 
-        SimInfo & simData, FlagInfo & flagData, char * type_name, int my_rank)
-{
-    // open binary file to save calculation state
-
-    FILE * saveFile;
-
-    char saveName[FLEN];
-
-    sprintf(saveName, "%s_%s_%d.%s", type_name, 
-        state_data_name, my_rank, state_data_ext);
-
-    if (file_exists(saveName))
-    {
-        // move file to backup copy if it already exists
-
-        int sys_val;
-        char sys_cmd[FLEN];
-
-        sprintf(sys_cmd, "mv %s %s_%s", 
-            saveName, backup_prefix, saveName);
-
-        sys_val = system(sys_cmd);
-
-        // warn on backup failure
-
-        if (sys_val)
-        {
-            fprintf(stdout, "WARNING: could not backup data file %s\n",
-                saveName);
-        }
-    }
-
-    saveFile = fopen(saveName, "wb");
-
-    if (saveFile == NULL)
-    {
-        char err_msg[FLEN];
-        sprintf(err_msg, "Could not open state file %s for writing\n",
-            saveName);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // copy out bath vectors
-
-    write_bath(bath_pointers, simData, saveFile);
-
-    // copy out RNG state
-
-    write_rng(gen, saveFile);
-
-    // copy out Propagator elements
-
-    write_prop(curr_prop, saveFile);
-
-    // copy out density matrices
-
-    write_rho(density_pointers, simData, saveFile);
-
-    // copy out Path vector elements
-
-    write_paths(pList, saveFile);
-
-    // copy out blocked density matrices
-
-    write_modes(mList, simData, saveFile);
-
-    // copy out program info
-
-    write_prog(simData, flagData, saveFile);
-    
-    // clean up
-
-    fclose(saveFile);
-}
-
-/* ------------------------------------------------------------------------ */
-
-// write_bath() -- helper function to serialize and copy out data on bath
-// oscillator phase space and MC step sizes
-
-/*
-struct BathPtr
-{
-    double * xvals;
-    double * pvals;
-    double * x_step;
-    double * p_step;
-};
-*/
-
-void write_bath(BathPtr & bath_pointers, SimInfo & simData, FILE * saveFile)
-{
-    // write out size of all arrays
-
-    unsigned len = simData.bath_modes;
-
-    fwrite(&len, sizeof(unsigned), 1, saveFile);
-
-    // write xvals array
-
-    fwrite(bath_pointers.xvals, sizeof(double), len, saveFile);
-
-    // write pvals array
-
-    fwrite(bath_pointers.pvals, sizeof(double), len, saveFile);
-
-    // write x_step array
-
-    fwrite(bath_pointers.x_step, sizeof(double), len, saveFile);
-
-    // write p_step array
-
-    fwrite(bath_pointers.p_step, sizeof(double), len, saveFile);
-}
-
-/* ------------------------------------------------------------------------ */
-
-// write_rng() -- helper function to write out RNG state using GSL library
-// functions
-
-void write_rng(gsl_rng * gen, FILE * saveFile)
-{
-    gsl_rng_fwrite(saveFile, gen);
-}
-
-/* ------------------------------------------------------------------------ */
-
-// write_prop() -- helper function to serialize and copy out data from
-// Propagator object to binary backup file. Note that not all fields are
-// written, since some are used for temporary data.
-
-/*
-struct Propagator
-{
-    complex<double> * prop;
-    complex<double> * ham;
-    complex<double> * ptemp;
-    vector<double> x0_free;
-    vector<double> p0_free;
-};
-*/
-
-void write_prop(Propagator & curr_prop, FILE * saveFile)
-{
-    // print propagator length (to avoid cross-run assumptions on DSTATES)
-        
-    unsigned propLen = static_cast<unsigned>(DSTATES*DSTATES);
-
-    fwrite(&propLen, sizeof(unsigned), 1, saveFile);
-
-    // write out current propagator array
-
-    fwrite(curr_prop.prop, sizeof(complex<double>), propLen, saveFile);
-
-    // write size of x0, p0 arrays
-
-    unsigned ic_len = curr_prop.x0_free.size();
-
-    fwrite(&ic_len, sizeof(unsigned), 1, saveFile);
-
-    // serialize and write out x0 array
-
-    double * serial_ics = new double [ic_len];
-
-    for (unsigned i = 0; i < ic_len; i++)
-        serial_ics[i] = curr_prop.x0_free[i];
-
-    fwrite(serial_ics, sizeof(double), ic_len, saveFile);
-
-    // serialize and write out p0 array
-
-    for (unsigned i = 0; i < ic_len; i++)
-        serial_ics[i] = curr_prop.p0_free[i];
-
-    fwrite(serial_ics, sizeof(double), ic_len, saveFile);
-
-    delete [] serial_ics;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// write_rho() -- helper function to serialize and copy data from single
-// DensityMatrices element to binary backup file
-
-/* 
-struct DensityPtr
-{
-    complex<double> ** rho_proc;
-    complex<double> * rho_ic_proc;
-    complex<double> ** rho_eacp_proc;
-
-    complex<double> ** rho_curr_checkpoint;
-    complex<double> ** rho_full_checkpoint;
-};
-
-*/
-
-void write_rho(DensityPtr & density_pointers, SimInfo & simData, 
-    FILE * saveFile)
-{
-    // print first array size
-
-    int xLen = qm_steps;
-
-    fwrite(&xLen, sizeof(int), 1, saveFile);
-
-    // print second array size
-
-    int yLen = DSTATES * DSTATES;
-
-    fwrite(&yLen, sizeof(int), 1, saveFile);
-
-    // loop over array dimensions and write out QCPI matrix
-
-    complex<double> * rho_single = new complex<double> [yLen];
-
-    for (int step = 0; step < xLen; step++)
-    {
-        // copy line out
-
-        for (int elem = 0; elem < yLen; elem++)
-            rho_single[elem] = density_pointers.rho_proc[step][elem];
-
-        fwrite(rho_single, sizeof(complex<double>), yLen, saveFile);
-    }
-
-    // can write rho_ic_proc directly
-
-    fwrite(density_pointers.rho_ic_proc, sizeof(complex<double>), 
-        xLen, saveFile);
-
-    // loop over array dimensions and write out EACP matrix
-
-    for (int step = 0; step < xLen; step++)
-    {
-        // copy line out
-
-        for (int elem = 0; elem < yLen; elem++)
-            rho_single[elem] = density_pointers.rho_eacp_proc[step][elem];
-
-        fwrite(rho_single, sizeof(complex<double>), yLen, saveFile);
-    }
-
-    // loop over array dimensions and write out current checkpoint data
-
-    for (int step = 0; step < xLen; step++)
-    {
-        // copy line out
-
-        for (int elem = 0; elem < yLen; elem++)
-            rho_single[elem] = density_pointers.rho_curr_checkpoint[step][elem];
-
-        fwrite(rho_single, sizeof(complex<double>), yLen, saveFile);
-    }
-
-    // loop over array dimensions and write out accumulated checkpoint data
-
-    for (int step = 0; step < xLen; step++)
-    {
-        // copy line out
-
-        for (int elem = 0; elem < yLen; elem++)
-            rho_single[elem] = density_pointers.rho_full_checkpoint[step][elem];
-
-        fwrite(rho_single, sizeof(complex<double>), yLen, saveFile);
-    }
-
-    // write out list of old reference states
-
-    fwrite(density_pointers.old_ref_list, sizeof(Ref), qm_steps, saveFile);
-
-    delete [] rho_single;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// write_paths() -- helper function to serialize and copy out data from
-// Path vector to backup file. Note that we don't write out ic_vec entries or 
-// path active status because these have standard values at the end of every 
-// segment loop when we go to write out a restart or checkpoint file
-
-/*
-struct Path
-{
-    vector<unsigned> fwd_path;
-    vector<unsigned> bwd_path;
-    complex<double> product;
-    complex<double> eacp_prod;
-    vector<double> x0;
-    vector<double> p0;
-
-    // filtering look-ahead
-    vector<iter_pair> ic_vec;
-
-    bool active;
-};
-*/
-
-void write_paths(vector<Path> & pList, FILE * saveFile)
-{
-    // print path list and fwd/bwd length
-
-    unsigned len = pList.size();
-
-    fwrite(&len, sizeof(unsigned), 1, saveFile);
-
-    unsigned path_len = pList[0].fwd_path.size();
-
-    fwrite(&path_len, sizeof(unsigned), 1, saveFile);
-
-    // print bath IC length
-
-    unsigned bath_len = pList[0].x0.size();
-
-    fwrite(&bath_len, sizeof(unsigned), 1, saveFile);
-
-    unsigned * rho_path = new unsigned [path_len];
-
-    double * bath_vals = new double [bath_len];
-
-    // loop over path list to print elements one-by-one
-
-    for (unsigned path = 0; path < len; path++)
-    {
-        // serialize and write fwd path
-
-        for (unsigned i = 0; i < path_len; i++)
-            rho_path[i] = pList[path].fwd_path[i];
-
-        fwrite(rho_path, sizeof(unsigned), path_len, saveFile);
-
-        // serialize and write bwd path
-
-        for (unsigned i = 0; i < path_len; i++)
-            rho_path[i] = pList[path].bwd_path[i];
-
-        fwrite(rho_path, sizeof(unsigned), path_len, saveFile);
-
-        // write out rho and eacp products
-
-        fwrite(&(pList[path].product), sizeof(complex<double>), 1,
-            saveFile);
-
-        fwrite(&(pList[path].eacp_prod), sizeof(complex<double>), 1,
-            saveFile);
-
-        // write out ICs (as x0 and p0)
-
-        for (unsigned i = 0; i < bath_len; i++)
-            bath_vals[i] = pList[path].x0[i];
-
-        fwrite(bath_vals, sizeof(double), bath_len, saveFile);
-
-        for (unsigned i = 0; i < bath_len; i++)
-            bath_vals[i] = pList[path].p0[i];
-
-        fwrite(bath_vals, sizeof(double), bath_len, saveFile);
-
-    } // end Path vector writing
-
-    delete [] rho_path;
-    delete [] bath_vals;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// write_modes() -- helper function to serialize and copy data from
-// bath mode listing to backup file
-
-/*
-struct Mode
-{
-    vector<double> x_t;
-    
-    double c;
-    double omega;
-};
-*/
-
-void write_modes(Mode * mList, SimInfo & simData, FILE * saveFile)
-{
-    // write out total length of mode array
-
-    unsigned bath_modes = static_cast<unsigned>(simData.bath_modes);
-
-    fwrite(&bath_modes, sizeof(unsigned), 1, saveFile);
-
-    // write out x(t) list size
-
-    unsigned list_len = mList[0].x_t.size();
-
-    fwrite(&list_len, sizeof(unsigned), 1, saveFile);
-
-    // allocate array to serialize x(t) vector
-
-    double * xt_array = new double [list_len];
-
-    // loop over modes and write out relevant data
-
-    for (unsigned mode = 0; mode < bath_modes; mode++)
-    {
-        // serialize x(t) vector
-
-        for (unsigned i = 0; i < list_len; i++)
-            xt_array[i] = mList[mode].x_t[i];
-
-        fwrite(xt_array, sizeof(double), list_len, saveFile);
-
-        // write out frequency and coupling info
-
-        fwrite(&(mList[mode].omega), sizeof(double), 1, saveFile);
-
-        fwrite(&(mList[mode].c), sizeof(double), 1, saveFile);
-    }
-
-    delete [] xt_array;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// write_prog() -- helper function to copy out data from ProgramInfo
-// structure to binary backup file (mostly error info and loop indices)
-
-/*
-struct SimInfo
-{
-    int ic_index;               // tracks starting IC for restart
-    int tstep_index;            // tracks timestep loop number for restart
-
-    char infile[FLEN];
-
-    double asym;
-    int ic_tot;
-    double dt;
-
-    int block_num;
-};
-
-struct FlagInfo
-{
-    // debugging flags and RNG seed
-
-    int shift_flag;
-    int analytic_flag;
-};
-*/
-
-void write_prog(SimInfo & simData, FlagInfo & flagData, FILE * saveFile)
-{
-    // write out loop indices
-
-    fwrite(&(simData.ic_index), sizeof(int), 1, saveFile);
-
-    fwrite(&(simData.tstep_index), sizeof(int), 1, saveFile);
-
-    // write out name of J(w)/w file as future consistency check
-
-    unsigned fname_size = strlen(simData.infile) + 1;
-
-    fwrite(&fname_size, sizeof(unsigned), 1, saveFile);
-
-    fwrite(simData.infile, sizeof(char), fname_size, saveFile);
-
-    // write out parameters we can't check via array sizes
-    // for future consistency guarantees
-
-    fwrite(&(simData.asym), sizeof(double), 1, saveFile);
-
-    fwrite(&(simData.ic_tot), sizeof(int), 1, saveFile);
-
-    fwrite(&(simData.dt), sizeof(double), 1, saveFile);
-
-    fwrite(&(simData.block_num), sizeof(int), 1, saveFile);
-
-    // write out important flag values
-
-    fwrite(&(flagData.shift_flag), sizeof(int), 1, saveFile);
-    
-    fwrite(&(flagData.analytic_flag), sizeof(int), 1, saveFile);
-}
-
-/* ------------------------------------------------------------------------ */
-
-// load_state() -- top-level function to control the order in which we
-// scan through files to find most current system state information. Order
-// is restart -> checkpoint -> backup checkpoint. The implementation of
-// lower-level functions to read data should also throw errors if the files
-// are corrupted or incomplete, so we don't need a separate check for this.
-
-void load_state(BathPtr & bath_pointers, gsl_rng * gen, Propagator & new_prop, 
-    DensityPtr & density_pointers, vector<Path> & newList, Mode * new_modes, 
-        SimInfo & simData, int my_rank)
-{
-    char curr_name[FLEN];
-    bool checkflg = false;
-    bool backupflg = false;
-    bool failflg = false;
-
-    char filename[FLEN];
-
-    sprintf(filename, "%s", simData.backupname);
-
-    // begin by looking for restart files
-
-    try
-    {
-        sprintf(curr_name, "%s_%s", restart_prefix, filename);
-
-        read_backup(bath_pointers, gen, new_prop, density_pointers, 
-            newList, new_modes, simData, curr_name, my_rank);
-    }
-    catch(const std::runtime_error & err)
-    {
-        // if we get an error, set a different flag
-
-        fprintf(stdout, "Proc %d threw exception: %s", 
-            my_rank, err.what());
-
-        checkflg = true;
-    }
-
-    // second choice is checkpoint files
-
-    if (checkflg)
-    {
-        try
-        {
-            sprintf(curr_name, "%s_%s", checkpoint_prefix, filename);
-
-            read_backup(bath_pointers, gen, new_prop, density_pointers, 
-                newList, new_modes, simData, curr_name, my_rank);
-        }
-        catch(const std::runtime_error & err)
-        {
-            // if we get error, set backup flag
-
-            fprintf(stdout, "Proc %d threw exception: %s", 
-                my_rank, err.what());
-
-            backupflg = true;
-        }
-    }
-
-    // last option is backup checkpoint files
-
-    if (backupflg)
-    {
-        try
-        {
-            sprintf(curr_name, "%s_%s_%s", backup_prefix, 
-                checkpoint_prefix, filename);
-
-            read_backup(bath_pointers, gen, new_prop, density_pointers, 
-                newList, new_modes, simData, curr_name, my_rank);
-        }
-        catch(const std::runtime_error & err)
-        {
-            // nothing else to try, fail and exit
-
-            fprintf(stdout, "Proc %d threw exception: %s", 
-                my_rank, err.what());
-            
-            failflg = true;
-        }
-    }
-
-    if (failflg)
-    {
-        char err_msg[FLEN]; 
-        sprintf(err_msg, 
-            "ERROR: Could not find working fileset to recover state from\n");
-
-        throw std::runtime_error(err_msg);
-    }
-}
-
-/* ------------------------------------------------------------------------ */
-
-// read_backup() -- general top-level function that reads binary backup files 
-// created by save_state()
-
-void read_backup(BathPtr & bath_pointers, gsl_rng * gen, Propagator & new_prop, 
-    DensityPtr & density_pointers, vector<Path> & newList, Mode * new_modes, 
-        SimInfo & simData, const char * curr_name, int my_rank)
-{   
-    // open binary file to read in new program state
-
-    FILE * saveFile;
-
-    char saveName[FLEN];
-
-    sprintf(saveName, "%s_%s_%d.%s", curr_name, 
-        state_data_name, my_rank, state_data_ext);
-
-    saveFile = fopen(saveName, "rb");
-
-    if (saveFile == NULL)
-    {
-        char err_msg[FLEN];
-        sprintf(err_msg, "Could not open backup file %s for reading\n",
-            saveName);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in bath arrays
-    
-    read_bath(bath_pointers, saveFile);
-
-    // read in RNG state
-    
-    read_rng(gen, saveFile);
-
-    // read in Propagator elements to new object
-    
-    read_prop(new_prop, saveFile);
-
-    // read in density matrices 
-
-    read_rho(density_pointers, simData, saveFile);
-
-    // read in Path vector elements to new array
-
-    read_paths(newList, saveFile);
-
-    // read in bath mode data
-
-    read_modes(new_modes, simData, saveFile);
-
-    // read in program data
-
-    read_prog(simData, saveFile);
-
-    // clean up
-
-    fclose(saveFile);
-}
-
-/* ------------------------------------------------------------------------ */
-
-// read_bath() -- helper function to read in bath trajectory and MC step
-// data from binary save file
-
-void read_bath(BathPtr & bath_pointers, FILE * saveFile)
-{
-    size_t bytes_read;
-    char err_msg[FLEN];
-
-    unsigned old_modes;
-
-    bytes_read = fread(&old_modes, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {  
-        sprintf(err_msg, "Error reading vector size\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if ( old_modes != static_cast<unsigned>(nmodes) )
-    {
-        sprintf(err_msg, "FATAL ERROR: previous nmodes value %u differs from current %u\n",
-            old_modes, nmodes);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // NOTE: Following should read results directly into correct
-    // memory for all scopes to use. Should check that this happens
-    // correctly, however!
-
-    // read in xvals array
-
-    bytes_read = fread(bath_pointers.xvals, sizeof(double), old_modes, saveFile);
-
-    if (bytes_read != old_modes)
-    {  
-        sprintf(err_msg, "Error reading in bath xvals array\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in pvals array
-
-    bytes_read = fread(bath_pointers.pvals, sizeof(double), old_modes, saveFile);
-
-    if (bytes_read != old_modes)
-    {  
-        sprintf(err_msg, "Error reading in bath pvals array\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in x_step array
-
-    bytes_read = fread(bath_pointers.x_step, sizeof(double), old_modes, saveFile);
-
-    if (bytes_read != old_modes)
-    {  
-        sprintf(err_msg, "Error reading in bath x_step array\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in p_step array
-
-    bytes_read = fread(bath_pointers.p_step, sizeof(double), old_modes, saveFile);
-
-    if (bytes_read != old_modes)
-    {  
-        sprintf(err_msg, "Error reading in bath p_step array\n");
-
-        throw std::runtime_error(err_msg);
-    }
-}
-
-/* ------------------------------------------------------------------------ */
-
-// read_rng() -- helper function that uses GSL library calls to read in a
-// saved rng state from a previous run. Assumption is that same generator is used
-// between runs, otherwise reload is meaningless.
-
-void read_rng(gsl_rng * gen, FILE * saveFile)
-{
-    gsl_rng_fread(saveFile, gen);
-}
-
-/* ------------------------------------------------------------------------ */
-
-// read_prop() -- helper function to read in propagator data from binary
-// backup file. Note that not all fields are read, since some are for
-// temporary variables.
-
-void read_prop(Propagator & new_prop, FILE * saveFile)
-{
-    size_t bytes_read;
-    char err_msg[FLEN];
-
-    // read in propagator array length
-        
-    unsigned propLen;
-
-    bytes_read = fread(&propLen, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading propagator size\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if (propLen != DSTATES*DSTATES)
-    {
-        sprintf(err_msg, "FATAL ERROR: Old propagator length of %u not equal to current size of %u\n",
-            propLen, DSTATES*DSTATES);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in stored propagator array
-
-    bytes_read = fread(new_prop.prop, sizeof(complex<double>), 
-        propLen, saveFile);
-
-    if (bytes_read != propLen)
-    {
-        sprintf(err_msg, "Error reading propagator array\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in size of x0, p0 arrays
-
-    unsigned ic_len;
-    
-    bytes_read = fread(&ic_len, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading propagator IC array size\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read x0 into array and copy to vector
-
-    double * serial_ics = new double [ic_len];
-
-    bytes_read = fread(serial_ics, sizeof(double), ic_len, saveFile);
-
-    if (bytes_read != ic_len)
-    {
-        sprintf(err_msg, "Error reading propagator x0 array\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    //new_prop.x0_free.clear();
-    //new_prop.x0_free.reserve(ic_len);
-
-    for (unsigned i = 0; i < ic_len; i++)
-        new_prop.x0_free.push_back(serial_ics[i]);
-
-    // read p0 into array and copy to vector
-
-    bytes_read = fread(serial_ics, sizeof(double), ic_len, saveFile);
-
-    if (bytes_read != ic_len)
-    {
-        sprintf(err_msg, "Error reading propagator p0 array\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    //new_prop.p0_free.clear();
-    //new_prop.p0_free.reserve(ic_len);
-
-    for (unsigned i = 0; i < ic_len; i++)
-        new_prop.p0_free.push_back(serial_ics[i]);
-
-    delete [] serial_ics;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// read_rho() -- helper function to read out QCPI and EACP rho(t) data
-// from binary backup file into current IC density matrix 
-
-void read_rho(DensityPtr & density_pointers, SimInfo & simData, FILE * saveFile)
-{
-    size_t bytes_read;
-    char err_msg[FLEN];
-
-    // read in first array size
-
-    int xLen;
-
-    bytes_read = fread(&xLen, sizeof(int), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading rho(t) x-dimension size\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if (xLen != qm_steps)
-    {
-        sprintf(err_msg, 
-            "Backup file step num. %u different from current value %u\n",
-                xLen, qm_steps);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in second array size
-
-    int yLen;
-
-    bytes_read = fread(&yLen, sizeof(int), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading rho(t) y-dimension size\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if (yLen != (DSTATES*DSTATES) )
-    {
-        sprintf(err_msg, 
-            "Backup file DVR state num. %d different from current value %d\n",
-                yLen, DSTATES*DSTATES);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // define type to match bytes_read (to avoid warning below)
-
-    unsigned arrayLen = static_cast<unsigned>(yLen);
-
-    // loop over array dimensions and read in QCPI matrix
-
-    complex<double> * rho_single = new complex<double> [yLen];
-
-    for (int step = 0; step < xLen; step++)
-    {
-        // read in single rho(t) line
-
-        bytes_read = fread(rho_single, sizeof(complex<double>), 
-            yLen, saveFile);
-
-        if (bytes_read != arrayLen)
-        {
-            sprintf(err_msg, "Error reading QCPI rho(t) block\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        for (int elem = 0; elem < yLen; elem++)
-            density_pointers.rho_proc[step][elem] = rho_single[elem];            
-    }
-
-    // read in rho_ic_proc directly
-
-    bytes_read = fread(density_pointers.rho_ic_proc, sizeof(complex<double>), 
-        xLen, saveFile);
-
-    if ( bytes_read != static_cast<unsigned>(xLen) )
-    {
-         sprintf(err_msg, "Error reading current IC rho(t) array\n");
-
-         throw std::runtime_error(err_msg);
-    }
-
-    // loop over array dimensions and read in EACP matrix
-
-    for (int step = 0; step < xLen; step++)
-    {
-        // read in single rho(t) line
-
-        bytes_read = fread(rho_single, sizeof(complex<double>), 
-            yLen, saveFile);
-
-        if (bytes_read != arrayLen)
-        {
-            char err_msg[FLEN];
-            sprintf(err_msg, "Error reading EACP rho(t) block\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        for (int elem = 0; elem < yLen; elem++)
-            density_pointers.rho_eacp_proc[step][elem] = rho_single[elem];
-    }
-
-    // loop over array dimensions and read in current checkpoint matrix
-
-    for (int step = 0; step < xLen; step++)
-    {
-        // read in single rho(t) line
-
-        bytes_read = fread(rho_single, sizeof(complex<double>), 
-            yLen, saveFile);
-
-        if (bytes_read != arrayLen)
-        {
-            char err_msg[FLEN];
-            sprintf(err_msg, "Error reading current checkpoint rho(t) block\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        for (int elem = 0; elem < yLen; elem++)
-            density_pointers.rho_curr_checkpoint[step][elem] = rho_single[elem];
-    }
-
-    // loop over array dimensions and read in accumulated checkpoint matrix
-
-    for (int step = 0; step < xLen; step++)
-    {
-        // read in single rho(t) line
-
-        bytes_read = fread(rho_single, sizeof(complex<double>), 
-            yLen, saveFile);
-
-        if (bytes_read != arrayLen)
-        {
-            char err_msg[FLEN];
-            sprintf(err_msg, "Error reading accumulated checkpoint rho(t) block\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        for (int elem = 0; elem < yLen; elem++)
-            density_pointers.rho_full_checkpoint[step][elem] = rho_single[elem];
-    }
-
-    // read in list of previous reference states
-
-    bytes_read = fread(density_pointers.old_ref_list, sizeof(Ref), qm_steps, saveFile);
-
-    if (bytes_read != static_cast<unsigned>(qm_steps))
-    {
-        char err_msg[FLEN];
-        sprintf(err_msg, "Error reading previous reference list\n");
-        
-        throw std::runtime_error(err_msg);
-    }
-
-    delete [] rho_single;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// read_paths() -- helper function read in serialized Path vector info and
-// translate this back to a new Path array in memory
-
-// Note that ic_vector can be left empty at this point, and all activity flags
-// are set to true, because this is the boundary condition present before each
-// write, and by extension, immediately after resuming segment loop on restart
-
-void read_paths(vector<Path> & newList, FILE * saveFile)
-{
-    size_t bytes_read;
-    char err_msg[FLEN];
-
-    // read path list lengths
-
-    unsigned len;
-
-    bytes_read = fread(&len, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading Path vector length\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    unsigned path_len;
-
-    bytes_read = fread(&path_len, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading fwd/bwd path length\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if ( path_len != static_cast<unsigned>(kmax) )
-    {
-        sprintf(err_msg, "FATAL ERROR: Old fwd/bwd length %u not compatible with current kmax %d\n",
-            path_len, kmax);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in length of bath IC list
-
-    unsigned bath_len;
-
-    bytes_read = fread(&bath_len, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading bath IC length for Path vector\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    unsigned * rho_path = new unsigned [path_len];
-
-    double * bath_vals = new double [bath_len];
-
-    // loop over path list to set elements
-
-    Path * tempPath;
-
-    for (unsigned path = 0; path < len; path++)
-    {
-        tempPath = new Path;
-
-        // read in fwd path and assign
-
-        bytes_read = fread(rho_path, sizeof(unsigned), path_len, saveFile);
-
-        if (bytes_read != path_len)
-        {
-            sprintf(err_msg, "Error reading fwd path array\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        //tempPath->fwd_path.reserve(path_len);
-
-        for (unsigned i = 0; i < path_len; i++)
-            tempPath->fwd_path.push_back(rho_path[i]);   
-
-        // read in bwd path and assign
-
-        bytes_read = fread(rho_path, sizeof(unsigned), path_len, saveFile);
-
-        if (bytes_read != path_len)
-        {
-            sprintf(err_msg, "Error reading bwd path array\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        //tempPath->bwd_path.reserve(path_len);
-
-        for (unsigned i = 0; i < path_len; i++)
-            tempPath->bwd_path.push_back(rho_path[i]);
-
-        // read in rho and eacp products
-
-        bytes_read = fread(&(tempPath->product), sizeof(complex<double>), 1,
-            saveFile);
-
-        if (bytes_read != 1)
-        {
-            sprintf(err_msg, "Error reading Path vector QCPI weight\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        bytes_read = fread(&(tempPath->eacp_prod), sizeof(complex<double>), 1,
-            saveFile);
-
-        if (bytes_read != 1)
-        {
-            sprintf(err_msg, "Error reading Path vector EACP weight\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        // read in x0 ICs
-
-        bytes_read = fread(bath_vals, sizeof(double), bath_len, saveFile);
-
-        if (bytes_read != bath_len)
-        {
-            sprintf(err_msg, "Error reading Path vector x0 vals\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        //tempPath->x0.reserve(bath_len);
-
-        for (unsigned i = 0; i < bath_len; i++)
-            tempPath->x0.push_back(bath_vals[i]);
-
-        // read in p0 ICs
-
-        bytes_read = fread(bath_vals, sizeof(double), bath_len, saveFile);
-
-        if (bytes_read != bath_len)
-        {
-            sprintf(err_msg, "Error reading Path vector p0 vals\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        //tempPath->p0.reserve(bath_len);
-
-        for (unsigned i = 0; i < bath_len; i++)
-            tempPath->p0.push_back(bath_vals[i]);
-
-        // set bool activity state
-
-        tempPath->active = true;
-
-        // push restored path element onto array
-
-        newList.push_back(*tempPath);
-
-        // delete temporary structure to avoid memory leak
-
-        delete tempPath;
-
-    } // end Path vector reading
-
-    delete [] rho_path;
-    delete [] bath_vals;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// read_modes() -- helper function to read in mode information tracked as
-// part of classical trajectory propogation and action calculation
-
-void read_modes(Mode * new_modes, SimInfo & simData, FILE * saveFile)
-{
-    size_t bytes_read;
-    char err_msg[FLEN];
-
-    // read in mode number
-
-    unsigned bath_modes;
-
-    bytes_read = fread(&bath_modes, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading bath mode number\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if ( bath_modes != static_cast<unsigned>(nmodes) )
-    {
-        sprintf(err_msg, 
-            "Backup file mode number %u different from current value %d\n",
-                bath_modes, nmodes);
-
-        throw std::runtime_error(err_msg);
-    }
-    
-    // read in x(t) list size
-
-    unsigned list_len;
-
-    bytes_read = fread(&list_len, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Error reading bath x(t) vector length\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // allocate memory to read in serial x(t) vector
-
-    double * xt_array = new double [list_len];
-
-    // loop over modes and write out relevant data
-
-    for (unsigned mode = 0; mode < bath_modes; mode++)
-    {
-        // read in x(t) values
-
-        bytes_read = fread(xt_array, sizeof(double), list_len, saveFile);
-
-        if (bytes_read != list_len)
-        {
-            sprintf(err_msg, "Error reading bath x(t) vector\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-        //new_modes[mode].x_t.reserve(list_len);
-
-        for (unsigned i = 0; i < list_len; i++)
-            new_modes[mode].x_t.push_back(xt_array[i]);
-
-        // read in frequency and coupling info
-
-        bytes_read = fread(&(new_modes[mode].omega), sizeof(double), 1, saveFile);
-
-        if (bytes_read != 1)
-        {
-            sprintf(err_msg, "Error reading in mode frequency\n");
-
-            throw std::runtime_error(err_msg);
-        }
-        
-        bytes_read = fread(&(new_modes[mode].c), sizeof(double), 1, saveFile);
-
-        if (bytes_read != 1)
-        {
-            sprintf(err_msg, "Error reading in mode coupling\n");
-
-            throw std::runtime_error(err_msg);
-        }
-
-    } // end mode loop
-
-    delete [] xt_array;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// read_prog() -- helper function to read in error and loop index info
-// into ProgramInfo structure from binary restart file
-
-void read_prog(SimInfo & simData, FILE * saveFile)
-{
-    size_t bytes_read;
-    char err_msg[FLEN];
-
-    // read in loop indices
-
-    bytes_read = fread(&(simData.ic_index), sizeof(int), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in IC loop index\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    bytes_read = fread(&(simData.tstep_index), sizeof(int), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in time segment index\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in name of J(w)/w file as consistency check
-
-    unsigned fname_size;
-    char filename[FLEN];
-
-    bytes_read = fread(&fname_size, sizeof(unsigned), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in input filename size\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    bytes_read = fread(filename, sizeof(char), fname_size, saveFile);
-
-    if (bytes_read != fname_size)
-    {
-        sprintf(err_msg, "Could not read in input filename\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if (strcmp(filename, simData.infile) != 0)
-    {
-        sprintf(err_msg, "FATAL ERROR: Old spectral density file %s incompatible with new file %s\n",
-            filename, simData.infile);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in non-array parameters as consistency check
-
-    // NOTE: Should double-valued comparisons use epsilon 
-    // error vals so we have wiggle room?
-
-    double old_asym;
-    int old_ics;
-    double old_dt;
-
-    // read in old asymmetry
-
-    bytes_read = fread(&old_asym, sizeof(double), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in asymmetry value\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if (old_asym != simData.asym)
-    {
-        sprintf(err_msg, "FATAL ERROR: Old asymmetry %.7e incompatible with new value %.7e\n",
-            old_asym, simData.asym);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in old IC number
-
-    bytes_read = fread(&old_ics, sizeof(int), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in total IC number\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if (old_ics != simData.ic_tot)
-    {
-        sprintf(err_msg, "FATAL ERROR: Old IC number %d incompatible with new value %d\n",
-            old_ics, simData.ic_tot);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in old dt value
-
-    bytes_read = fread(&old_dt, sizeof(double), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in old dt value\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if (old_dt != simData.dt)
-    {
-        sprintf(err_msg, "FATAL ERROR: Old timestep %.4f incompatible with new value %.4f\n",
-            old_dt, simData.dt);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in old block number
-
-    int old_blocks;
-
-    bytes_read = fread(&old_blocks, sizeof(int), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in old block number value\n");
-
-        throw std::runtime_error(err_msg);
-    }
-    else if (old_blocks != simData.block_num)
-    {
-        sprintf(err_msg, "FATAL ERROR: Old block number %d incompatible with new value %d\n",
-            old_blocks, simData.block_num);
-
-        throw std::runtime_error(err_msg);
-    }
-
-    // read in SHIFT flag value
-
-    int temp_flag;
-
-    bytes_read = fread(&temp_flag, sizeof(int), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in bath shift flag\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    SHIFT = temp_flag;
-
-    // read in ANALYTICFLAG value
-
-    bytes_read = fread(&temp_flag, sizeof(int), 1, saveFile);
-
-    if (bytes_read != 1)
-    {
-        sprintf(err_msg, "Could not read in analytic trajectory flag\n");
-
-        throw std::runtime_error(err_msg);
-    }
-
-    ANALYTICFLAG = temp_flag;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// file_exists() -- simple function that uses POSIX filesystem I/O methods
-// to check for file existence and returns this information as bool state
-
-bool file_exists(char * filename)
-{
-    struct stat fileInfo;
-
-    return (stat(filename, &fileInfo) == 0);
 }
 
 /* ------------------------------------------------------------------------ */
