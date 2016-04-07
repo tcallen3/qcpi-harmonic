@@ -238,10 +238,8 @@ double dist(double, double, double, double, double, double);
 
 // EDIT NOTE: (Need to remove NR ODE functions and reimplement)
 // propagator integration
-void ho_update(Propagator &, Mode *, double);
 void ho_update_exact(Propagator &, Mode *, double);
 void build_ham(Propagator &, Mode *, int);
-void build_ham_exact(Propagator &, Mode *);
 void prop_eqns(double, complex<double> *, complex<double> *, void *);
 void rk4(complex<double> * y, complex<double> * dydx, int n, double x, double h, 
     complex<double> * yout, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params);
@@ -750,25 +748,20 @@ int main(int argc, char * argv[])
             }
 
             // first find unforced (x,p)
-            // note that ho_update clears ref_modes x(t) and p(t) list
-
-            //ho_update(curr_prop, ref_modes, ho_ref_state);
+            // note that ho_update_exact clears ref_modes x(t) and p(t) list
 
             // EDIT NOTES: (rename ho_update fns to something better)
 
-            if (ANALYTICFLAG > 0)
-                ho_update_exact(curr_prop, ref_modes, ho_ref_state);
-            else
-                ho_update(curr_prop, ref_modes, ho_ref_state);
+            ho_update_exact(curr_prop, ref_modes, ho_ref_state);
 
-            // chunk trajectory into pieces for greater
-            // accuracy in integrating U(t)
-/*
-            for (int chunk = chunksize-1; chunk < step_pts; chunk += chunksize)
+                // chunk trajectory into pieces for greater
+                // accuracy in integrating U(t)
+
+            for (int chunk_num = 0; chunk_num < chunks; chunk_num++)
             {
                 // construct H(x,p) from bath configuration
             
-                build_ham(curr_prop, ref_modes, chunk);
+                build_ham(curr_prop, ref_modes, chunk_num);
 
                 // integrate TDSE for U(t) w/ piece-wise constant
                 // Hamiltonian approx.
@@ -784,65 +777,7 @@ int main(int argc, char * argv[])
                 curr_prop.prop = curr_prop.ptemp;
                 curr_prop.ptemp = swap;
 
-            } // end chunk loop
-*/
-
-            if (ANALYTICFLAG > 0)
-            {
-                // chunk trajectory into pieces for greater
-                // accuracy in integrating U(t)
-
-                for (int chunk_num = 0; chunk_num < chunks; chunk_num++)
-                {
-                    // construct H(x,p) from bath configuration
-            
-                    build_ham(curr_prop, ref_modes, chunk_num);
-
-                    // integrate TDSE for U(t) w/ piece-wise constant
-                    // Hamiltonian approx.
-
-                    rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                        0.0, rho_dt, rho_steps, prop_eqns, curr_prop.ham);
-
-                    // swap out true and temp pointers
-
-                    complex<double> * swap;
-
-                    swap = curr_prop.prop;
-                    curr_prop.prop = curr_prop.ptemp;
-                    curr_prop.ptemp = swap;
-
-                } // end chunk loop            
-            }
-            else
-            {
-                // chunk trajectory into pieces for greater
-                // accuracy in integrating U(t)
-
-                for (int chunk = chunksize-1; chunk < step_pts; chunk += chunksize)
-                {
-                    // construct H(x,p) from bath configuration
-            
-                    build_ham(curr_prop, ref_modes, chunk);
-
-                    // integrate TDSE for U(t) w/ piece-wise constant
-                    // Hamiltonian approx.
-
-                    rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                        0.0, rho_dt, rho_steps, prop_eqns, curr_prop.ham);
-
-                    // swap out true and temp pointers
-
-                    complex<double> * swap;
-
-                    swap = curr_prop.prop;
-                    curr_prop.prop = curr_prop.ptemp;
-                    curr_prop.ptemp = swap;
-
-                } // end chunk loop
-
-            } // end analytic clause for U(t) integration
-
+            } // end chunk loop            
 
             // loop over all paths at this time point
 
@@ -1047,68 +982,8 @@ int main(int argc, char * argv[])
                 else
                     fRand = bRand = 1;
 
-/*
-                if (xi < rho_ic_proc[seg-1].real() )    
-                {
-                    fRand = bRand = 0;
-                    ho_ref_state = dvr_left;
-                }
-                else
-                {
-                    fRand = bRand = 1;
-                    ho_ref_state = dvr_right;
-                }
-*/
-
             } // end EACP reference choice clause
 
-/*
-            if (seg < 2*kmax)
-            {
-                // update as equil. reference branch
-
-                if (SHIFT)
-                {
-                    // assumes bath centered around left state
-
-                    fRand = bRand = 0;
-                }
-                else
-                {
-                    // averages over (0,1) and (1,0) states, since
-                    // in this case bath center is between the two
-
-                    fRand = static_cast<unsigned>(gsl_rng_uniform_int(gen,2));
-                    bRand = 1 - fRand;
-                }
-            }
-            else
-            {
-                // update according to lagged rho(t)
-
-                double xi = gsl_rng_uniform(gen);
-
-                if (xi < rho_ic_proc[seg-kmax].real() )    
-                {
-                    fRand = bRand = 0;
-                }
-                else
-                {
-                    fRand = bRand = 1;
-                }
-            }
-*/
-
-/*
-            // TODO: eventually change EACP reference here as well!
-
-            double xi = gsl_rng_uniform(gen);
-
-            if (xi < rho_ic_proc[seg-kmax].real() )
-                fRand = bRand = 0;
-            else
-                fRand = bRand = 1;
-*/
             // integrate unforced equations and find U(t)
 
             for (int i = 0; i < DSTATES; i++)
@@ -1124,20 +999,16 @@ int main(int argc, char * argv[])
 
             // first find unforced (x,p)
 
-            //ho_update(curr_prop, ref_modes, ho_ref_state);
+            ho_update_exact(curr_prop, ref_modes, ho_ref_state);
 
-            if (ANALYTICFLAG > 0)
-                ho_update_exact(curr_prop, ref_modes, ho_ref_state);
-            else
-                ho_update(curr_prop, ref_modes, ho_ref_state);
+            // chunk trajectory into pieces for greater
+            // accuracy in integrating U(t)
 
-
-/*
-            for (int chunk = chunksize-1; chunk < step_pts; chunk += chunksize)
+            for (int chunk_num = 0; chunk_num < chunks; chunk_num++)
             {
                 // construct H(x,p) from bath configuration
             
-                build_ham(curr_prop, ref_modes, chunk);
+                build_ham(curr_prop, ref_modes, chunk_num);
 
                 // integrate TDSE for U(t) w/ piece-wise constant
                 // Hamiltonian approx.
@@ -1153,64 +1024,7 @@ int main(int argc, char * argv[])
                 curr_prop.prop = curr_prop.ptemp;
                 curr_prop.ptemp = swap;
 
-            } // end chunk loop
-*/
-
-            if (ANALYTICFLAG > 0)
-            {
-                // chunk trajectory into pieces for greater
-                // accuracy in integrating U(t)
-
-                for (int chunk_num = 0; chunk_num < chunks; chunk_num++)
-                {
-                    // construct H(x,p) from bath configuration
-            
-                    build_ham(curr_prop, ref_modes, chunk_num);
-
-                    // integrate TDSE for U(t) w/ piece-wise constant
-                    // Hamiltonian approx.
-
-                    rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                        0.0, rho_dt, rho_steps, prop_eqns, curr_prop.ham);
-
-                    // swap out true and temp pointers
-
-                    complex<double> * swap;
-
-                    swap = curr_prop.prop;
-                    curr_prop.prop = curr_prop.ptemp;
-                    curr_prop.ptemp = swap;
-
-                } // end chunk loop            
-            }
-            else
-            {
-                // chunk trajectory into pieces for greater
-                // accuracy in integrating U(t)
-
-                for (int chunk = chunksize-1; chunk < step_pts; chunk += chunksize)
-                {
-                    // construct H(x,p) from bath configuration
-            
-                    build_ham(curr_prop, ref_modes, chunk);
-
-                    // integrate TDSE for U(t) w/ piece-wise constant
-                    // Hamiltonian approx.
-
-                    rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                        0.0, rho_dt, rho_steps, prop_eqns, curr_prop.ham);
-
-                    // swap out true and temp pointers
-
-                    complex<double> * swap;
-
-                    swap = curr_prop.prop;
-                    curr_prop.prop = curr_prop.ptemp;
-                    curr_prop.ptemp = swap;
-
-                } // end chunk loop
-
-            } // end analytic clause for U(t) integration
+            } // end chunk loop            
 
             // turn off paths below thresh
 
@@ -2930,70 +2744,6 @@ double dist(double x_old, double x_new, double p_old, double p_new,
 
 /* ------------------------------------------------------------------------ */
 
-// classically propagate unforced H.O. modes
-
-void ho_update(Propagator & prop, Mode * mlist, double ref_state)
-{
-    double del_t = dt/step_pts;
-
-    for (int mode = 0; mode < nmodes; mode++)
-    {
-        // set up ICs for trajectory
-
-        double w = mlist[mode].omega;
-        //double c = mlist[mode].c;
-
-        double x0, xt;
-        double p0, pt;
-        double f0, ft;
-
-        x0 = prop.x0_free[mode];
-        p0 = prop.p0_free[mode];
-
-        //f0 = -1.0*mass*w*w*x0;
-
-        f0 = -1.0*mass*w*w*x0 + mlist[mode].c * ref_state;
-
-        // clear out any old trajectory info
-        // might be more efficient just to overwrite
-
-        mlist[mode].x_t.clear();
-
-        // integrate equations of motion
-
-        for (int step = 0; step < step_pts; step++)
-        {
-            // Verlet update
-
-            xt = x0 + (p0/mass)*del_t + 0.5*(f0/mass)*del_t*del_t;
-
-            //ft = -1.0*mass*w*w*xt;
-
-            ft = -1.0*mass*w*w*xt + mlist[mode].c * ref_state;
-
-            pt = p0 + 0.5*(f0 + ft)*del_t;
-
-            x0 = xt;
-            p0 = pt;
-            f0 = ft;
-            
-            // accumulate trajectory segment in mode object
-
-            mlist[mode].x_t.push_back(xt);          
-
-        } // end traj. loop
-
-        // update current phase space point
-
-        prop.x0_free[mode] = xt;
-        prop.p0_free[mode] = pt;
-
-    } // end mode loop
-
-} // end ho_update
-
-/* ------------------------------------------------------------------------- */
-
 void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state)
 {
     double del_t = dt/2.0;
@@ -3146,75 +2896,6 @@ void build_ham(Propagator & prop, Mode * modes, int chunk)
     prop.ham[3] = tls_mat[3] + bath_mat[3];
 
 } // end build_ham()
-
-/* ------------------------------------------------------------------------ */
-
-void build_ham_exact(Propagator & prop, Mode * modes)
-{
-    // copy off-diagonal from anharmonic code
-    const double off_diag = hbar*tls_freq;
-
-    // store sums for diagonal matrix elements of H
-    // left_sum for (0,0); right_sum for (1,1)
-    double left_sum;
-    double right_sum;
-
-    // energy stores harmonic bath potential energy
-    // this should integrate out, but is included here
-    // for completeness
-    double energy = 0.0;
-
-    // store system and system-bath coupling contributions separately
-    complex<double> tls_mat[4];
-    complex<double> bath_mat[4];
-
-    // system matrix is just splitting and any asymmetry
-    // note that signs should be standard b/c I'm using
-    // (-1,+1) instead of (+1,-1)
-
-    tls_mat[0] = asym; //dvr_left*(1.0*asym);
-    tls_mat[1] = -1.0*off_diag;
-    tls_mat[2] = -1.0*off_diag;
-    tls_mat[3] = -1.0*asym; //dvr_right*(1.0*asym);
-
-    // system-bath matrix includes linear coupling plus
-    // quadratic offset
-
-    // in this form, it also includes the bath potential energy
-
-    left_sum = 0.0;
-    right_sum = 0.0;
-
-    for (int i = 0; i < nmodes; i++)
-    {
-        double csquare = modes[i].c*modes[i].c;
-        double wsquare = modes[i].omega*modes[i].omega;
-        double x = prop.x0_free[i];
-
-        left_sum += -1.0*modes[i].c*x*dvr_left +
-            csquare*dvr_left*dvr_left/(2.0*mass*wsquare);
-
-        right_sum += -1.0*modes[i].c*x*dvr_right +
-            csquare*dvr_right*dvr_right/(2.0*mass*wsquare);
-
-        energy += 0.5*mass*wsquare*x*x;
-    }
-
-    // Removing energy term to see if this is
-    // dominating energy gap and causing issues
-
-    bath_mat[0] = left_sum;
-    bath_mat[1] = 0.0;
-    bath_mat[2] = 0.0;
-    bath_mat[3] = right_sum;
-
-    // total hamiltonian is sum of system and system-bath parts
-
-    prop.ham[0] = tls_mat[0] + bath_mat[0];
-    prop.ham[1] = tls_mat[1] + bath_mat[1];
-    prop.ham[2] = tls_mat[2] + bath_mat[2];
-    prop.ham[3] = tls_mat[3] + bath_mat[3];
-}
 
 /* ------------------------------------------------------------------------ */
 
