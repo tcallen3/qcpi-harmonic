@@ -6,18 +6,16 @@
 
 2.5) Test code to make sure it compiles and runs (and reg test)
 
-3.) Factor structure definitions and function declarations into
-    separate files
+2.75) Remove fake EACP functionality and fixed ref option
 
-4.) Remove code from copyrighted and GPL'd sources
+3.) Eliminate blocking and block avg/var
+
+4.) Factor structure definitions and function declarations into
+    separate files
 
 5.) Eliminate dupe print statements
 
-6.) Eliminate blocking and block avg/var
+6.) Remove code from copyrighted and GPL'd sources
 
 7.) Refactor code to use vectors and structs in place of bare
     allocated arrays
-
-8.) Remove EACP printing (and even storage) since this is not
-    actually EACP results anyway. If we want to do this properly,
-    add it into the code on consultation with Peter.
