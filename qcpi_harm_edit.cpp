@@ -248,7 +248,6 @@ void rkdriver(complex<double> * vstart, complex<double> * out, int nvar, double 
 
 // QCPI functions
 void qcpi_update_exact(Path &, Mode *);
-double action_calc(Path &, Mode *, Mode *);
 double action_calc_exact(Path &, Mode *, Mode *);
 
 // simple matrix multiply
@@ -791,10 +790,7 @@ int main(int argc, char * argv[])
 
                 double phi;
 
-                if (ANALYTICFLAG > 0)
-                    phi = action_calc_exact(pathList[path], modes, ref_modes);
-                else
-                    phi = action_calc(pathList[path], modes, ref_modes);
+                phi = action_calc_exact(pathList[path], modes, ref_modes);
 
                 // EDIT NOTES: (block this into function)
                 // calculate proper rho contribution
@@ -1208,10 +1204,7 @@ int main(int argc, char * argv[])
 
                         double phi;
 
-                        if (ANALYTICFLAG > 0)
-                            phi = action_calc_exact(temp, modes, ref_modes);
-                        else
-                            phi = action_calc(temp, modes, ref_modes);
+                        phi = action_calc_exact(temp, modes, ref_modes);
 
                         // calculate proper rho contribution
 
@@ -2961,70 +2954,6 @@ void qcpi_update_exact(Path & qm_path, Mode * mlist)
 }
 
 /* ------------------------------------------------------------------------- */
-
-// NOTE: Do we need c^2*s^2 correction added here?
-
-double action_calc(Path & qm_path, Mode * mlist, Mode * reflist)
-{
-    double del_t = dt/step_pts;
-    double dvr_vals[DSTATES] = {dvr_left, dvr_right};
-
-    // loop over modes and integrate their action contribution
-    // as given by S = c*int{del_s(t')*x(t'), 0, t_final}
-
-    double action = 0.0;
-
-    for (int mode = 0; mode < nmodes; mode++)
-    {
-        double sum = 0.0;
-
-        // set indices to correct half steps
-
-        unsigned size = qm_path.fwd_path.size();
-
-        unsigned splus = qm_path.fwd_path[size-2];
-        unsigned sminus = qm_path.bwd_path[size-2];
-
-        // integrate first half of trajectory
-
-        for (int step = 0; step < step_pts/2; step++)
-        {
-            double ds = dvr_vals[splus] - dvr_vals[sminus];
-            double pre = mlist[mode].c * ds;
-
-            if ( step == 0 || step == (step_pts/2)-1 )
-                pre *= 0.5;
-
-            sum += pre * (mlist[mode].x_t[step] - reflist[mode].x_t[step]);
-
-        } // end first half traj. loop
-
-        splus = qm_path.fwd_path[size-1];
-        sminus = qm_path.bwd_path[size-1];
-
-        // integrate second half of trajectory
-
-        for (int step = step_pts/2; step < step_pts; step++)
-        {
-            double ds = dvr_vals[splus] - dvr_vals[sminus];
-            double pre = mlist[mode].c * ds;
-
-            if ( step == (step_pts/2) || step == step_pts-1 )
-                pre *= 0.5;
-
-            sum += pre * (mlist[mode].x_t[step] - reflist[mode].x_t[step]);
-
-        } // end second half traj. loop
-
-        action += sum * del_t;
-
-    } // end mode loop
-
-    return action;
-
-} // end action_calc
-
-/* ------------------------------------------------------------------------ */
 
 double action_calc_exact(Path & qm_path, Mode * mlist, Mode * reflist)
 {
