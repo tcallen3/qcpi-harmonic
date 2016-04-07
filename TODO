@@ -1,0 +1,12 @@
+1.) Remove filtering functionality (DONE)
+
+2.) Remove all-caps flags (ANALYTIC, TRAJ, etc.)
+
+3.) Factor structure definitions and function declarations into
+    separate files
+
+4.) Remove code from copyrighted and GPL'd sources
+
+5.) Eliminate dupe print statements
+
+6.) Eliminate blocking and block avg/var

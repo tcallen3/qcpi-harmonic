@@ -15,30 +15,12 @@
     It also makes use of the EACP trajectories
     as a reference state, in the hopes of
     improving convergence behavior. 
-
-    This code further seeks to improve execution
-    time by incorporating filtering ideas into
-    the iterative summation. In contrast to
-    hbath_filter.cpp, it also deletes filtered
-    paths from the path vector, in an attempt to
-    save space. 
-
-    This code also employs restart techniques
-    as used in iter_qcpi.cpp, in order to run
-    safely for long times on large-scale
-    computing platforms. */
-
-
-// NOTE: This program uses the opposite sign convention
-//        for the DVR states to other hbath_* programs.
-//        However, this should agree with Nancy's convention.
+*/
 
 // NOTE: If we take dvr_left = 1.0 and dvr_right = -1.0,
 //         then the correctly coordinate-shifted states are 
 //         dvr_left = 0.0 and dvr_right = -2.0. Other desired 
 //          shifts can be extrapolated from this example.
-
-// NOTE: Need to compile with error.cpp
 
 #include <iostream>
 #include <fstream>
@@ -97,8 +79,6 @@ int ic_tot; // = 30;                  // number of ICs to use
 double dt;                              // quantum timestep
 int qm_steps; // = 150;                     // number of quantum steps to use
 int kmax;                                // memory length
-
-double filter_thresh;                   // filtering threshold
 
 int block_num;                        // number of blocks for MC variance
 int step_pts; // = 100;                // number of action integration points per QM timestep
@@ -192,7 +172,6 @@ struct SimInfo
     double dt;
     int qm_steps;
     int kmax;
-    double filter_thresh;
     int step_pts;
     int chunks;
     int rho_steps;
@@ -311,8 +290,6 @@ int main(int argc, char * argv[])
     qm_steps = simData.qm_steps;
     kmax = simData.kmax;
 
-    filter_thresh = simData.filter_thresh;
-
     step_pts = simData.step_pts;
     chunks = simData.chunks;
     chunksize = step_pts/chunks;
@@ -349,9 +326,6 @@ int main(int argc, char * argv[])
 
     if (dt <= 0)
         error->all("Quantum timestep must be positive");
-
-    if (filter_thresh < 0.0)
-        error->all("Filtering threshold cannot be negative");
 
     if (qm_steps < kmax)
         error->all("Quantum step number smaller than kmax");
@@ -542,18 +516,6 @@ int main(int argc, char * argv[])
     }
 
 
-/*
-    complex<double> * old_prop = new complex<double> [DSTATES*DSTATES];
-    
-    // define propagator as generalized bare TLS
-
-    double w_new = sqrt(asym*asym + tls_freq*tls_freq);
-
-    old_prop[0] = cos(w_new*dt) - I*(asym/w_new)*sin(w_new*dt);
-    old_prop[3] = conj(old_prop[0]);
-    old_prop[1] = old_prop[2] = I*tls_freq*sin(w_new*dt)/w_new;
-*/
-
     // define ODE timestep
 
     rho_dt = dt/chunks;
@@ -642,9 +604,6 @@ int main(int argc, char * argv[])
 
     for (int ic_curr = 0; ic_curr < my_ics; ic_curr++)
     {
-      // only run t < kmax and build paths if we're not restarting
-      
-
         // zero per-proc rho(t)
 
         for (int i = 0; i < qm_steps; i++)
@@ -654,7 +613,6 @@ int main(int argc, char * argv[])
             for (int j = 0; j < DSTATES*DSTATES; j++)
                 rho_curr_checkpoint[i][j] = 0.0;
         }
-
 
         // generate ICs for HOs using MC walk (we use last step's
         // ICs as current step's IC seed)
@@ -844,46 +802,7 @@ int main(int argc, char * argv[])
                 old_ref_list[seg+1] = REF_RIGHT;
             }
 
-            // EDIT NOTES: (remove filtering functionality)
-            // remove paths below thresh
-
-            unsigned del_num = 0;
-
-            for (unsigned path = 0; path < pathList.size(); path++)
-            {
-                if (abs(pathList[path].product) < filter_thresh)
-                {
-                    pathList[path].active = false;
-                    del_num++;
-                }
-            }
-
             tempList.clear();
-
-            // only delete if we find sub-thresh paths
-
-            if (del_num > 0)
-            {
-                // reserve space to avoid wasted allocations
-
-                tempList.reserve(pathList.size() - del_num);
-
-                for (unsigned path = 0; path < pathList.size(); path++)
-                {
-                    Path tpath;
-
-                    // copy over non-deleted paths
-
-                    if (pathList[path].active)
-                    {
-                        tpath = pathList[path];
-                        tempList.push_back(tpath);
-                    }
-                }
-
-                pathList.swap(tempList);
-                tempList.clear();
-            }
 
         } // end seg loop (full path phase)
 
@@ -1014,139 +933,6 @@ int main(int argc, char * argv[])
 
             } // end chunk loop            
 
-            // turn off paths below thresh
-
-            for (unsigned path = 0; path < pathList.size(); path++)
-            {
-                if (abs(pathList[path].product) < filter_thresh)
-                    pathList[path].active = false;
-            }
-
-            // do initial loop over paths to set up dependencies
-
-            for (unsigned path = 0; path < pathList.size(); path++)
-            {
-                // first make sure contributing path is present
-
-                vector<unsigned> fwd_temp, bwd_temp;
-
-                fwd_temp.assign(pathList[path].fwd_path.begin(),
-                    pathList[path].fwd_path.end() - 1);
-
-                bwd_temp.assign(pathList[path].bwd_path.begin(),
-                    pathList[path].bwd_path.end() - 1);
-
-                fwd_temp.insert(fwd_temp.begin(), fRand);
-                bwd_temp.insert(bwd_temp.begin(), bRand);
-
-                unsigned long long index = get_binary(fwd_temp, bwd_temp);
-
-                if (pathMap.count(index) == 0)
-                {
-                    // IC contributor was filtered, check other candidates
-
-                    bool found_flg = false;
-
-                    for (int i = 0; i < DSTATES; i++)
-                    {
-                        for (int j = 0; j < DSTATES; j++)
-                        {
-                            fwd_temp[0] = i;
-                            bwd_temp[0] = j;
-
-                            index = get_binary(fwd_temp, bwd_temp);
-
-                            // if we find viable path, get ICs there instead
-
-                            if (pathMap.count(index) > 0)
-                            {
-                                found_flg = true;
-
-                                unsigned donor_id = pathList[path].fwd_path.back() * DSTATES +
-                                    pathList[path].bwd_path.back();
-
-                                unsigned location = pathMap[index];
-
-                                unsigned long long curr_key = 
-                                    get_binary(pathList[path].fwd_path, pathList[path].bwd_path);       
-
-                                // Use key rather than path below, since path changes w/ deletion?
-
-                                pathList[location].ic_vec.push_back(iter_pair(donor_id,curr_key));
-
-                            } // end dependency update clause
-
-                            if (found_flg)
-                                break;
-
-                        } // end j (bwd) loop
-    
-                        if (found_flg)
-                            break;
-
-                    } // end i (fwd) loop
-
-                    // if we can't find candidate turn off path
-
-                    if (!found_flg)
-                        pathList[path].active = false;
-
-                } // end deleted search clause
-
-                else if (!pathList[pathMap[index]].active)
-                {
-                    // IC contributor was turned off, check other candidates
-
-                    bool found_flg = false;
-
-                    for (int i = 0; i < DSTATES; i++)
-                    {
-                        for (int j = 0; j < DSTATES; j++)
-                        {
-                            fwd_temp[0] = i;
-                            bwd_temp[0] = j;
-
-                            index = get_binary(fwd_temp, bwd_temp);
-
-                            unsigned target = pathMap[index];
-
-                            // if we find active path, get ICs there instead
-
-                            if (pathList[target].active)
-                            {
-                                found_flg = true;
-
-                                unsigned donor_id = pathList[path].fwd_path.back() * DSTATES +
-                                    pathList[path].bwd_path.back();
-
-                                unsigned long long curr_key = 
-                                    get_binary(pathList[path].fwd_path, pathList[path].bwd_path);       
-
-                                // Use key rather than path below, since path changes w/ deletion?
-
-                                pathList[target].ic_vec.push_back(iter_pair(donor_id,curr_key));
-
-                            } // end dependency update clause
-
-                            if (found_flg)
-                                break;
-
-                        } // end j (bwd) loop
-    
-                        if (found_flg)
-                            break;
-
-                    } // end i (fwd) loop
-
-                    // if we can't find candidate turn off path
-
-                    if (!found_flg)
-                        pathList[path].active = false;
-
-                } // end turned-off search clause
-
-            } // end dependency path loop
-
             // set up tempList to hold our matrix mult.
             // intermediates
 
@@ -1175,9 +961,6 @@ int main(int argc, char * argv[])
             {
                 complex<double> tensorProd;
                 complex<double> tensorEacp;
-
-              if (pathList[path].active)
-              {
 
                 // loop over all pairs of fwd/bwd system states
                 // to generate next step element
@@ -1243,95 +1026,19 @@ int main(int argc, char * argv[])
                         
                         // check to see if target path is in list
 
-                        if (pathMap.count(target) == 0) // path deleted
+                        unsigned outPath = pathMap[target];
+
+                        // path is already present in list, so update it
+
+                        tempList[outPath].product += tensorProd * temp.product;
+                        tempList[outPath].eacp_prod += tensorEacp * temp.eacp_prod;
+        
+                        // update ICs if we have correct donor element
+
+                        if (temp.fwd_path[0] == fRand && temp.bwd_path[0] == bRand)
                         {
-                            // resurrect deleted path
-
-                            Path resPath;
-                            
-                            resPath.fwd_path.assign(ftemp.begin(), ftemp.end());
-                            resPath.bwd_path.assign(btemp.begin(), btemp.end());
-
-                            resPath.product = tensorProd * temp.product;
-                            resPath.eacp_prod = tensorEacp * temp.eacp_prod;
-
-                            resPath.active = true;
-
-                            // update ICs since deactivation
-    
-                            resPath.x0.assign(temp.x0.begin(), temp.x0.end());
-                            resPath.p0.assign(temp.p0.begin(), temp.p0.end());
-
-                            // push onto path lists
-
-                            pathList.push_back(resPath);
-                            tempList.push_back(resPath);
-
-                            // update map
-
-                            unsigned index = pathList.size() - 1;
-
-                            map_single(pathMap, resPath, index);
-                        }
-                        else if (!tempList[pathMap[target]].active) // in list, but filtered
-                        {
-                            unsigned outPath = pathMap[target];
-
-                            // reactivate turned-off path
-
-                            tempList[outPath].active = true;
-
-                            tempList[outPath].product = tensorProd * temp.product;
-                            tempList[outPath].eacp_prod = tensorEacp * temp.eacp_prod;
-
-                            // update ICs since deactivation
-    
                             tempList[outPath].x0.assign(temp.x0.begin(), temp.x0.end());
                             tempList[outPath].p0.assign(temp.p0.begin(), temp.p0.end());
-                        }
-                        else
-                        {
-                            unsigned outPath = pathMap[target];
-
-                            // path is already present in list, so update it
-
-                            tempList[outPath].product += tensorProd * temp.product;
-                            tempList[outPath].eacp_prod += tensorEacp * temp.eacp_prod;
-        
-                            // update ICs if we have correct donor element
-
-                            if (temp.fwd_path[0] == fRand && temp.bwd_path[0] == bRand)
-                            {
-                                tempList[outPath].x0.assign(temp.x0.begin(), temp.x0.end());
-                                tempList[outPath].p0.assign(temp.p0.begin(), temp.p0.end());
-                            }
-
-                        } // end sum/reactivation clause
-
-                        // also copy ICs over to elements in ic_vec
-
-                        unsigned long long target_key;
-
-                        for (unsigned ind = 0; ind < temp.ic_vec.size(); ind++) 
-                        {
-                            // donor_id tracks which extension belongs where
-                        
-                            unsigned donor_id = fwd * DSTATES + bwd;
-
-                            if (donor_id == temp.ic_vec[ind].first)
-                            {
-                                unsigned path_loc;
-
-                                target_key = temp.ic_vec[ind].second;
-
-                                path_loc = pathMap[target_key];
-
-                                tempList[path_loc].x0.assign(temp.x0.begin(), 
-                                    temp.x0.end());
-
-                                tempList[path_loc].p0.assign(temp.p0.begin(), 
-                                    temp.p0.end());
-                            }
                         }
 
                         // pop off previous update (returning length to kmax)
@@ -1343,18 +1050,11 @@ int main(int argc, char * argv[])
 
                 } // end fwd loop
 
-              } // end filter check loop
-                
             } // end path loop (iter. phase)    
 
             // swap tempList and pathList
 
             pathList.swap(tempList);
-
-            // just to make sure, clear out ic_vec
-
-            for (unsigned pos = 0; pos < pathList.size(); pos++)
-                pathList[pos].ic_vec.clear();
 
             // pull out current density matrix
 
@@ -1366,25 +1066,15 @@ int main(int argc, char * argv[])
 
                 unsigned rindex = splus1*DSTATES + sminus1;
 
-                // only update if path is active
+                rho_proc[seg][rindex] += pathList[path].product;
+                rho_eacp_proc[seg][rindex] += pathList[path].eacp_prod;
 
-                if (pathList[path].active)
-                {
-                    rho_proc[seg][rindex] += pathList[path].product;
-                    rho_eacp_proc[seg][rindex] += pathList[path].eacp_prod;
+                rho_curr_checkpoint[seg][rindex] += pathList[path].product;
 
-                    rho_curr_checkpoint[seg][rindex] += pathList[path].product;
-
-                    if (rindex == 0)
-                        rho_ic_proc[seg] += pathList[path].product;
-                }
+                if (rindex == 0)
+                    rho_ic_proc[seg] += pathList[path].product;
 
             } // end update loop (iter. phase)
-
-            // reset all paths to active status
-
-            for (unsigned path = 0; path < pathList.size(); path++)
-                pathList[path].active = true;
 
         } // end seg loop (iter. phase)
 
@@ -1598,7 +1288,6 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "Quantum steps: %d\n", qm_steps);
         fprintf(outfile, "Memory length (kmax): %d\n", kmax);
-        fprintf(outfile, "Filtering threshold: %.3e\n", filter_thresh);
         fprintf(outfile, "Step length (a.u): %.5f\n", dt);
         fprintf(outfile, "IC num: %d\n", ic_tot);
         fprintf(outfile, "RNG seed: %lu\n", seed);
@@ -1840,7 +1529,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
     sim->asym = 0.5;                // system asymmetry (in kcal/mol)
     sim->bath_modes = 60;           // number of bath oscillators
     sim->mc_steps = 50000;          // default MC burn
-    sim->filter_thresh = 0.0;       // default to unfiltered run
     sim->step_pts = 100;            // number of action integration points
     sim->chunks = 5;                // must evenly divide step_pts
     sim->rho_steps = 100;            // points used to integrate U(t)
@@ -2015,13 +1703,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
             sim->mc_steps = atol(arg2);
         }
 
-        else if (strcmp(arg1, "filter_thresh") == 0)
-        {
-            // set filtering threshold
-
-            sim->filter_thresh = atof(arg2);
-        }
-
         else if (strcmp(arg1, "step_pts") == 0)
         {
             // set action integration points per step
@@ -2191,9 +1872,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
 
     if (sim->mc_steps < 0)
         error->all("Monte Carlo burn length can't be negative");
-
-    if (sim->filter_thresh < 0)
-        error->all("Filtering threshold can't be negative");
 
     // ensure kmax < total steps
 
