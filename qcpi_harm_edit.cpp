@@ -41,17 +41,6 @@ using namespace std;
 // file buffer size
 const int FLEN = 1024;
 
-// EDIT NOTE: (delete)
-// backup file types 
-const char state_data_name[] = "coredata";
-const char state_data_ext[] = "bin";
-
-// EDIT NOTE: (delete)
-// filename prefix to control variation
-const char backup_prefix[] = "backup";
-const char checkpoint_prefix[] = "checkpoint";
-const char restart_prefix[] = "restart";
-
 // EDIT NOTE: (move to namespace and header)
 // semi-constants (working in a.u.) 
 const double kcal_to_hartree = 1.5936e-3; // For converting asymmetry to hartree
@@ -89,26 +78,9 @@ int rho_steps; // = 100;                // number of ODE integration points
 
 double bath_temp; // = 247;                 // Az-B temperature in K
 double beta; // = 1.0/(kb*bath_temp);       // reciprocal temperature in a.u.
-
 // RNG flag for repeatability
 unsigned long seed; // = 179524;
 unsigned long block_seed_spacing;
-
-// Shifting flag for centering W(x,p)
-// Set to 1 to turn shifting on, and 0 to turn off
-int SHIFT; // = 1;
-
-// EDIT NOTE: Set up to run all H.O. analytic only
-
-// Flag to determine numerical/analytical
-// trajectory evaluation
-int ANALYTICFLAG; // = 0;
-
-// EDIT NOTE: (remove debug messages)
-// debugging flags
-int REPORT; // = 0;
-int TFLAG; // = 0;
-int RHOPRINT; // = 0;
 
 // EDIT NOTE: (Move data structs to header and clean up)
 
@@ -132,11 +104,6 @@ struct Path
     complex<double> eacp_prod;
     vector<double> x0;
     vector<double> p0;
-
-    // filtering look-ahead
-    vector<iter_pair> ic_vec;
-
-    bool active;
 };
 
 struct Propagator
@@ -186,11 +153,6 @@ struct FlagInfo
 {
     // debugging flags and RNG seed
 
-    int shift_flag;
-    int report_flag;
-    int traj_flag;
-    int rho_print_flag;
-    int analytic_flag;
     unsigned long seed;
     unsigned long block_seed_spacing;
 };
@@ -255,7 +217,7 @@ int main(int argc, char * argv[])
     Error * error = new Error(w_comm);
 
     // process arguments, format should be:
-    //      mpirun -n <proc_num> ./prog_name <config_file> [restart]
+    //      mpirun -n <proc_num> ./prog_name <config_file>
 
     if (argc < 2)
     {
@@ -276,8 +238,6 @@ int main(int argc, char * argv[])
     // assign values to config. vars
 
     startup(config_file, &simData, &flagData, w_comm);
-
-    // check for restart state
 
     // set global parameters from startup() output
 
@@ -301,12 +261,6 @@ int main(int argc, char * argv[])
 
     seed = flagData.seed;
     block_seed_spacing = flagData.block_seed_spacing;
-
-    SHIFT = flagData.shift_flag;
-    REPORT = flagData.report_flag;
-    TFLAG = flagData.traj_flag;
-    ANALYTICFLAG = flagData.analytic_flag;
-    RHOPRINT = flagData.rho_print_flag;
 
     // set some index data manually
 
@@ -372,25 +326,6 @@ int main(int argc, char * argv[])
         }
     }
 
-    // open up trajfile, if needed
-
-    if (TFLAG)
-    {   
-        char trajname[FLEN];
-
-        sprintf(trajname, "traj_%s", simData.outfile);
-
-        trajfile = fopen(trajname, "w");
-
-        if (trajfile == NULL)
-        {
-            char errstr[FLEN];
-            sprintf(errstr, "Could not open file %s",
-                trajname);
-            error->one(errstr);
-        } 
-    }
-
     // begin timing calculation
 
     double start = MPI_Wtime();
@@ -417,20 +352,6 @@ int main(int argc, char * argv[])
 
     for (int i = 0; i < nmodes; i++)
         bath_coup[i] = sqrt(2.0*w0/pi) * bath_freq[i];
-
-    // write out frequency, coupling pairs if
-    // REPORT flag is turned on
-
-    if (me == 0 && REPORT)
-    {
-        fprintf(stdout, "\n\n");
-
-        for (int i = 0; i < nmodes; i++)
-            fprintf(stdout, "%.10e %.10e\n", bath_freq[i],
-                bath_coup[i]);
-
-        fprintf(stdout, "\n");
-    }
 
     // EDIT NOTES: (enforce even division in code)
 
@@ -536,26 +457,15 @@ int main(int argc, char * argv[])
     complex<double> * rho_ic_proc = new complex<double> [qm_steps];
     complex<double> ** rho_eacp_proc = new complex<double> * [qm_steps];
 
-    // allocated matrices for rho(t) checkpointing
-
-    complex<double> ** rho_curr_checkpoint = new complex<double> * [qm_steps];
-    complex<double> ** rho_full_checkpoint = new complex<double> * [qm_steps];
-
     for (int i = 0; i < qm_steps; i++)
     {
         rho_proc[i] = new complex<double> [DSTATES*DSTATES];
         rho_eacp_proc[i] = new complex<double> [DSTATES*DSTATES];
 
-        rho_curr_checkpoint[i] = new complex<double> [DSTATES*DSTATES];
-        rho_full_checkpoint[i] = new complex<double> [DSTATES*DSTATES];
-        
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
             rho_proc[i][j] = 0.0;
             rho_eacp_proc[i][j] = 0.0;
-
-            rho_curr_checkpoint[i][j] = 0.0;
-            rho_full_checkpoint[i][j] = 0.0;
         }
     }
 
@@ -592,8 +502,6 @@ int main(int argc, char * argv[])
 
     double ho_ref_state = dvr_left;
 
-    // check for restart state
-    
     // Following loops are the core computational ones
 
     // Outer loop goes over initial conditions (selected by MC runs)
@@ -609,27 +517,12 @@ int main(int argc, char * argv[])
         for (int i = 0; i < qm_steps; i++)
         {
             rho_ic_proc[i] = 0.0;
-
-            for (int j = 0; j < DSTATES*DSTATES; j++)
-                rho_curr_checkpoint[i][j] = 0.0;
         }
 
         // generate ICs for HOs using MC walk (we use last step's
         // ICs as current step's IC seed)
 
         double ratio = ic_gen(xvals, pvals, bath_freq, bath_coup, x_step, p_step, gen);
-
-        // write trajectory to separate file for record
-
-        if (TFLAG)
-        {
-            fprintf(trajfile, "IC set %d (acc. ratio %f):\n\n", ic_curr, ratio);
-
-            for (int i = 0; i < nmodes; i++)
-                fprintf(trajfile, "%.10f %.10f\n", xvals[i], pvals[i]);
-
-            fprintf(trajfile, "\n");  
-        }       
 
         // for time points < kmax
 
@@ -647,8 +540,6 @@ int main(int argc, char * argv[])
         pstart.eacp_prod = 1.0;
         pstart.x0.assign(xvals, xvals+nmodes);
         pstart.p0.assign(pvals, pvals+nmodes);
-
-        pstart.active = true;
 
         pathList.push_back(pstart);
 
@@ -777,8 +668,6 @@ int main(int argc, char * argv[])
 
                 rho_proc[seg][rindex] += pathList[path].product;
                 rho_eacp_proc[seg][rindex] += pathList[path].eacp_prod;
-
-                rho_curr_checkpoint[seg][rindex] += pathList[path].product;
 
                 if (rindex == 0)
                     rho_ic_proc[seg] += pathList[path].product;
@@ -943,10 +832,6 @@ int main(int argc, char * argv[])
             {
                 tempList[tp].product = 0.0;
                 tempList[tp].eacp_prod = 0.0;
-
-                // erase copied ic_vec so we don't double-count
-
-                tempList[tp].ic_vec.clear();
             }
 
             // loop over paths to construct tensor contributions
@@ -1069,24 +954,12 @@ int main(int argc, char * argv[])
                 rho_proc[seg][rindex] += pathList[path].product;
                 rho_eacp_proc[seg][rindex] += pathList[path].eacp_prod;
 
-                rho_curr_checkpoint[seg][rindex] += pathList[path].product;
-
                 if (rindex == 0)
                     rho_ic_proc[seg] += pathList[path].product;
 
             } // end update loop (iter. phase)
 
         } // end seg loop (iter. phase)
-
-        // copy current run out to accumulated IC matrix
-
-        for (int i = 0; i < qm_steps; i++)
-        {
-            for (int j = 0; j < DSTATES*DSTATES; j++)
-            {
-                rho_full_checkpoint[i][j] += rho_curr_checkpoint[i][j];
-            }
-        }
 
     } // end IC loop
 
@@ -1270,8 +1143,6 @@ int main(int argc, char * argv[])
 
     // output summary
 
-      // no restart, so print full output
-
       if (me == 0)
       {
         int repeat = 50;
@@ -1293,13 +1164,7 @@ int main(int argc, char * argv[])
         fprintf(outfile, "RNG seed: %lu\n", seed);
         fprintf(outfile, "MC skip: %ld\n", steps);
 
-        if (ANALYTICFLAG > 0)
-            fprintf(outfile, "Analytic trajectory integration: on\n");
-        else
-        {
-            fprintf(outfile, "Analytic trajectory integration: off\n");
-            fprintf(outfile, "Action integration points (per step): %d\n", step_pts);
-        }
+        fprintf(outfile, "Analytic trajectory integration: on\n");
 
         if (simData.fixed_ref)
             fprintf(outfile, "Simulation used EACP reference fixed at point: %.4f\n", 
@@ -1329,11 +1194,7 @@ int main(int argc, char * argv[])
         fprintf(outfile, "Bath temperature: %.2f\n", bath_temp);
         fprintf(outfile, "Inverse temperature: %.4f\n", beta);
         fprintf(outfile, "Bath mode mass parameter: %.3f\n", mass);
-        
-        if (SHIFT)
-            fprintf(outfile, "Using shifted W(x,p) (minimum at x=lambda)\n\n");
-        else
-            fprintf(outfile, "Using unshifted W(x,p) (minimum at x=0)\n\n");
+        fprintf(outfile, "Using shifted W(x,p) (minimum at x=lambda)\n\n");
 
         for (int i = 0; i < repeat; i++)
             fprintf(outfile, "-");
@@ -1360,65 +1221,7 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "\n\n");
 
-        if (RHOPRINT)   // print all entries of matrix
-        {    
-            // open separate output file
-
-            char * basename = strtok(simData.outfile, ".");
-            char rho_full_name[FLEN];
-
-            sprintf(rho_full_name, "%s_full_matrix.dat", basename);
-
-            FILE * full_outfile;
-
-            full_outfile = fopen(rho_full_name, "w");
-
-            if (full_outfile == NULL)
-            {
-                fprintf(stderr, "Could not open %s for full rho(t) output\n", 
-                    rho_full_name);
-            }
-            else
-            {
-                // print full rho(t) to new file
-
-                fprintf(full_outfile, 
-                    "Columns are flattened rho(t) elements\n");
-
-                fprintf(full_outfile, 
-                    "Each of the %d pairs is ordered by Re(rho(t)) Im(rho(t))\n\n", 
-                        DSTATES*DSTATES);
-
-                for (int i = 0; i < qm_steps; i++)
-                {
-                    fprintf(full_outfile, "%7.4f ", (i+1)*dt);
-
-                    for (int j = 0; j < DSTATES*DSTATES; j++)
-                    {
-                        fprintf(full_outfile, "%13.10f %13.10f ", 
-                            rho_real[i*DSTATES*DSTATES+j],
-                                rho_imag[i*DSTATES*DSTATES+j]);
-                    }
-
-                    fprintf(full_outfile, "\n");
-                }
-
-                fclose(full_outfile);
-
-            } // end full rho(t) printing file clause
-
-            // also print baseline results to standard file
-
-            for (int i = 0; i < qm_steps; i++)
-            {
-                int entry = i*DSTATES*DSTATES;
-
-                fprintf(outfile, "%7.4f %8.5f %6.3f (Tr = %13.10f)\n", (i+1)*dt, 
-                    rho_real[entry], rho_var[i], rho_real[entry]+rho_real[entry+3]);    
-            }
-        }
-        else    // only print (0,0) element
-        {
+       
             for (int i = 0; i < qm_steps; i++)
             {
                 int entry = i*DSTATES*DSTATES;
@@ -1427,7 +1230,6 @@ int main(int argc, char * argv[])
                     rho_real[entry], rho_var[i], rho_real[entry]+rho_real[entry+3]);
             }
 
-        } // end RHOPRINT clause
 
         fprintf(outfile, "\n");
 
@@ -1537,11 +1339,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
     // note that original definitions use integer
     // flags, which is why these are ints and not bool
 
-    flag->shift_flag = 1;           // turn on bath shifting
-    flag->analytic_flag = 0;        // turn off exact traj. by default
-    flag->report_flag = 0;          // turn off bath mode reporting
-    flag->traj_flag = 0;            // turn off x0, p0 reporting
-    flag->rho_print_flag = 0;       // turn off full rho(t) printing
     flag->seed = 179524;            // GSL RNG seed
     flag->block_seed_spacing = 4782; // change in seed value per block
 
@@ -1557,11 +1354,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
 
     bool inflg = false;
     bool outflg = false;
-
-    // extra flags for restart commands
-
-    bool time_budgetflg = false;
-    bool dump_stateflg = false;
 
     // set category flags
 
@@ -1717,66 +1509,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
             sim->chunks = atoi(arg2);
         }
 
-        else if (strcmp(arg1, "bath_shift") == 0)
-        {
-            // set SHIFT parameter
-
-            if (strcmp(arg2, "on") == 0)
-                flag->shift_flag = 1;
-            else if (strcmp(arg2, "off") == 0)
-                flag->shift_flag = 0;
-            else
-                error->all("Unrecognized bath shift option");
-        }
-
-        else if (strcmp(arg1, "exact_traj") == 0)
-        {
-            // set analytic trajectories on or off
-
-            if (strcmp(arg2, "on") == 0)
-                flag->analytic_flag = 1;
-            else if (strcmp(arg2, "off") == 0)
-                flag->analytic_flag = 0;
-            else
-                error->all("Unrecognized analytical trajectory option");
-        }
-
-        else if (strcmp(arg1, "mode_reporting") == 0)
-        {
-            // set bath mode reporting
-
-            if (strcmp(arg2, "on") == 0)
-                flag->report_flag = 1;
-            else if (strcmp(arg2, "off") == 0)
-                flag->report_flag = 0;
-            else
-                error->all("Unrecognized mode reporting option");
-        }
-
-        else if (strcmp(arg1, "traj_reporting") == 0)
-        {
-            // set trajectory reporting
-
-            if (strcmp(arg2, "on") == 0)
-                flag->traj_flag = 1;
-            else if (strcmp(arg2, "off") == 0)
-                flag->traj_flag = 0;
-            else
-                error->all("Unrecognized trajectory reporting option");
-        }
-
-        else if (strcmp(arg1, "full_rho_print") == 0)
-        {
-            // set RHOPRINT parameter
-
-            if (strcmp(arg2, "on") == 0)
-                flag->rho_print_flag = 1;
-            else if (strcmp(arg2, "off") == 0)
-                flag->rho_print_flag = 0;
-            else
-                error->all("Unrecognized bath shift option");
-        }
-
         else if (strcmp(arg1, "rng_seed") == 0)
         {
             // set RNG seed (ensure seed isn't 0)
@@ -1823,14 +1555,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
 
         if (!fileflg)
             error->all("Must specify spectral density input file, and data output file");
-    }
-
-    if (dump_stateflg)
-    {
-        if (!time_budgetflg)
-        {
-            error->all("Must specify time budget for state dumping");
-        }
     }
 
     // ensure consistency of step_pts and chunk values
@@ -2374,17 +2098,14 @@ double dist(double x_old, double x_new, double p_old, double p_new,
     // need atomic units     
     double f = hbar*omega*beta;
 
-    if (SHIFT)
-    {
-        // shift to DVR state w/ -1 element in sigma_z basis
-        double lambda = dvr_left * coup * ( 1.0/(mass*omega*omega) );
-        //double lambda = dvr_right * coup * ( 1.0/(mass*omega*omega) );
+    // shift to DVR state w/ -1 element in sigma_z basis
 
-        // shifting distribution for equilibrium
+    double lambda = dvr_left * coup * ( 1.0/(mass*omega*omega) );
 
-        x_new -= lambda;
-        x_old -= lambda;
-    }
+    // shifting distribution for equilibrium
+
+    x_new -= lambda;
+    x_old -= lambda;
 
     // calculate Wigner distribution ratio for these x,p vals
 
