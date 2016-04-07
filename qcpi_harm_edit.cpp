@@ -247,7 +247,6 @@ void rkdriver(complex<double> * vstart, complex<double> * out, int nvar, double 
     double x2, int nstep, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params);
 
 // QCPI functions
-void qcpi_update(Path &, Mode *);
 void qcpi_update_exact(Path &, Mode *);
 double action_calc(Path &, Mode *, Mode *);
 double action_calc_exact(Path &, Mode *, Mode *);
@@ -786,16 +785,9 @@ int main(int argc, char * argv[])
                 // calculate x(t) and p(t) at integration points
                 // along all paths
 
-                //qcpi_update(pathList[path], modes);
-
-                if (ANALYTICFLAG > 0)
-                    qcpi_update_exact(pathList[path], modes);
-                else
-                    qcpi_update(pathList[path], modes);
+                qcpi_update_exact(pathList[path], modes);
 
                 // use integration points to find new phase contribution
-
-                //double phi = action_calc(pathList[path], modes, ref_modes);
 
                 double phi;
 
@@ -1210,16 +1202,9 @@ int main(int argc, char * argv[])
                         // calculate x(t) and p(t) at integration points
                         // along new path (note this changes x0, p0 in temp)
 
-                        //qcpi_update(temp, modes);
-
-                        if (ANALYTICFLAG > 0)
-                            qcpi_update_exact(temp, modes);
-                        else
-                            qcpi_update(temp, modes);
+                        qcpi_update_exact(temp, modes);
 
                         // use integration points to find new phase contribution
-
-                        //double phi = action_calc(temp, modes, ref_modes);
 
                         double phi;
 
@@ -2898,101 +2883,6 @@ void build_ham(Propagator & prop, Mode * modes, int chunk)
 } // end build_ham()
 
 /* ------------------------------------------------------------------------ */
-
-void qcpi_update(Path & qm_path, Mode * mlist)
-{
-    double del_t = dt/step_pts;
-    double dvr_vals[DSTATES] = {dvr_left, dvr_right};
-
-    for (int mode = 0; mode < nmodes; mode++)
-    {
-        // set up ICs for first half of path
-
-        double w = mlist[mode].omega;
-        double c = mlist[mode].c;
-
-        double x0, xt;
-        double p0, pt;
-        double f0, ft;
-
-        x0 = qm_path.x0[mode];
-        p0 = qm_path.p0[mode];
-
-        unsigned size = qm_path.fwd_path.size();
-
-        unsigned splus = qm_path.fwd_path[size-2];
-        unsigned sminus = qm_path.bwd_path[size-2];
-
-        f0 = -1.0*mass*w*w*x0 + c*0.5*(dvr_vals[splus] +
-            dvr_vals[sminus]);
-
-        // clear out any old trajectory info
-        // might be more efficient just to overwrite
-
-        mlist[mode].x_t.clear();
-
-        // integrate equations of motion
-
-        for (int step = 0; step < step_pts/2; step++)
-        {
-            // Verlet update
-
-            xt = x0 + (p0/mass)*del_t + 0.5*(f0/mass)*del_t*del_t;
-
-            ft = -1.0*mass*w*w*xt + c*0.5*(dvr_vals[splus] +
-                dvr_vals[sminus]);
-
-            pt = p0 + 0.5*(f0 + ft)*del_t;
-
-            x0 = xt;
-            p0 = pt;
-            f0 = ft;
-            
-            // accumulate trajectory segment in mode object
-
-            mlist[mode].x_t.push_back(xt);          
-
-        } // end first half traj. loop
-
-        // loop over second half of trajectory
-
-        splus = qm_path.fwd_path[size-1];
-        sminus = qm_path.bwd_path[size-1];
-
-        f0 = -1.0*mass*w*w*x0 + c*0.5*(dvr_vals[splus] +
-            dvr_vals[sminus]);
-    
-        for (int step = step_pts/2; step < step_pts; step++)
-        {
-            // Verlet update
-
-            xt = x0 + (p0/mass)*del_t + 0.5*(f0/mass)*del_t*del_t;
-
-            ft = -1.0*mass*w*w*xt + c*0.5*(dvr_vals[splus] +
-                dvr_vals[sminus]);
-
-            pt = p0 + 0.5*(f0 + ft)*del_t;
-
-            x0 = xt;
-            p0 = pt;
-            f0 = ft;
-            
-            // accumulate trajectory segment in mode object
-
-            mlist[mode].x_t.push_back(xt);          
-
-        } // end second half traj. loop
-
-        // update current phase space point
-
-        qm_path.x0[mode] = xt;
-        qm_path.p0[mode] = pt;
-
-    } // end mode loop
-
-} // end qcpi_update
-
-/* ------------------------------------------------------------------------- */
 
 void qcpi_update_exact(Path & qm_path, Mode * mlist)
 {
