@@ -101,7 +101,6 @@ struct Path
     vector<unsigned> fwd_path;
     vector<unsigned> bwd_path;
     complex<double> product;
-    complex<double> eacp_prod;
     vector<double> x0;
     vector<double> p0;
 };
@@ -455,17 +454,14 @@ int main(int argc, char * argv[])
 
     complex<double> ** rho_proc = new complex<double> * [qm_steps];
     complex<double> * rho_ic_proc = new complex<double> [qm_steps];
-    complex<double> ** rho_eacp_proc = new complex<double> * [qm_steps];
 
     for (int i = 0; i < qm_steps; i++)
     {
         rho_proc[i] = new complex<double> [DSTATES*DSTATES];
-        rho_eacp_proc[i] = new complex<double> [DSTATES*DSTATES];
 
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
             rho_proc[i][j] = 0.0;
-            rho_eacp_proc[i][j] = 0.0;
         }
     }
 
@@ -537,7 +533,6 @@ int main(int argc, char * argv[])
         pstart.fwd_path.push_back(0);   // left-localized
         pstart.bwd_path.push_back(0);   // left-localized
         pstart.product = 1.0;
-        pstart.eacp_prod = 1.0;
         pstart.x0.assign(xvals, xvals+nmodes);
         pstart.p0.assign(pvals, pvals+nmodes);
 
@@ -658,16 +653,12 @@ int main(int argc, char * argv[])
                 pathList[path].product *= curr_prop.prop[findex] * 
                     conj(curr_prop.prop[bindex]) * exp(I*phi);
 
-                pathList[path].eacp_prod *= curr_prop.prop[findex] *
-                    conj(curr_prop.prop[bindex]);
-
                 // EDIT NOTES: (block into function)
                 // pull out density matrix at each time point
 
                 unsigned rindex = splus1*DSTATES + sminus1;
 
                 rho_proc[seg][rindex] += pathList[path].product;
-                rho_eacp_proc[seg][rindex] += pathList[path].eacp_prod;
 
                 if (rindex == 0)
                     rho_ic_proc[seg] += pathList[path].product;
@@ -831,7 +822,6 @@ int main(int argc, char * argv[])
             for (unsigned tp = 0; tp < tempList.size(); tp++)
             {
                 tempList[tp].product = 0.0;
-                tempList[tp].eacp_prod = 0.0;
             }
 
             // loop over paths to construct tensor contributions
@@ -916,7 +906,6 @@ int main(int argc, char * argv[])
                         // path is already present in list, so update it
 
                         tempList[outPath].product += tensorProd * temp.product;
-                        tempList[outPath].eacp_prod += tensorEacp * temp.eacp_prod;
         
                         // update ICs if we have correct donor element
 
@@ -952,7 +941,6 @@ int main(int argc, char * argv[])
                 unsigned rindex = splus1*DSTATES + sminus1;
 
                 rho_proc[seg][rindex] += pathList[path].product;
-                rho_eacp_proc[seg][rindex] += pathList[path].eacp_prod;
 
                 if (rindex == 0)
                     rho_ic_proc[seg] += pathList[path].product;
@@ -1013,71 +1001,25 @@ int main(int argc, char * argv[])
         }
     }
 
-    // collect real and imag parts of EACP rho into separate
-    // arrays for MPI communication
-
-    double * eacp_real_proc = new double [qm_steps*DSTATES*DSTATES];
-    double * eacp_imag_proc = new double [qm_steps*DSTATES*DSTATES];
-
-    double * eacp_real = new double [qm_steps*DSTATES*DSTATES];
-    double * eacp_imag = new double [qm_steps*DSTATES*DSTATES];
-
-    for (int i = 0; i < qm_steps; i++)
-    {
-        for (int j = 0; j < DSTATES*DSTATES; j++)
-        {
-            eacp_real_proc[i*DSTATES*DSTATES+j] = rho_eacp_proc[i][j].real();
-            eacp_imag_proc[i*DSTATES*DSTATES+j] = rho_eacp_proc[i][j].imag();
-
-            eacp_real[i*DSTATES*DSTATES+j] = 0.0;
-            eacp_imag[i*DSTATES*DSTATES+j] = 0.0;
-        }
-    }
-
-    // Allreduce the real and imaginary arrays
-
-    MPI_Allreduce(eacp_real_proc, eacp_real, qm_steps*DSTATES*DSTATES,
-        MPI_DOUBLE, MPI_SUM, w_comm);
-
-    MPI_Allreduce(eacp_imag_proc, eacp_imag, qm_steps*DSTATES*DSTATES,
-        MPI_DOUBLE, MPI_SUM, w_comm);
-
-    // scale arrays by Monte Carlo factor
-
-    for (int i = 0; i < qm_steps; i++)
-    {
-        for (int j = 0; j < DSTATES*DSTATES; j++)
-        {
-            eacp_real[i*DSTATES*DSTATES+j] /= ic_tot;
-            eacp_imag[i*DSTATES*DSTATES+j] /= ic_tot;
-        }
-    }
-
     // calculate block averages and variance
 
     double * rho_real_block = new double [qm_steps*DSTATES*DSTATES];
-    double * eacp_real_block = new double [qm_steps*DSTATES*DSTATES];
 
     double * rho_var = new double [qm_steps];
-    double * eacp_var = new double [qm_steps];
 
     double * rho_var_block = new double [qm_steps];
-    double * eacp_var_block = new double [qm_steps];
 
     // initialize to zero
     
     for (int i = 0; i < qm_steps; i++)
     {
         rho_var[i] = 0.0;
-        eacp_var[i] = 0.0;
 
         rho_var_block[i] = 0.0;
-        eacp_var_block[i] = 0.0;
 
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
             rho_real_block[i*DSTATES*DSTATES+j] = 0.0;
-            eacp_real_block[i*DSTATES*DSTATES+j] = 0.0;
         }
     }
 
@@ -1085,12 +1027,9 @@ int main(int argc, char * argv[])
 
     if (block_num > 1)
     {
-        // Allreduce rho and eacp real values across block
+        // Allreduce rho real values across block
 
         MPI_Allreduce(rho_real_proc, rho_real_block, qm_steps*DSTATES*DSTATES,
-            MPI_DOUBLE, MPI_SUM, block_comm);
-
-        MPI_Allreduce(eacp_real_proc, eacp_real_block, qm_steps*DSTATES*DSTATES,
             MPI_DOUBLE, MPI_SUM, block_comm);
 
         // get total IC number in block
@@ -1106,7 +1045,6 @@ int main(int argc, char * argv[])
             for (int j = 0; j < DSTATES*DSTATES; j++)
             {
                 rho_real_block[i*DSTATES*DSTATES+j] /= block_ics;
-                eacp_real_block[i*DSTATES*DSTATES+j] /= block_ics;
             }
 
             int entry = i*DSTATES*DSTATES;
@@ -1114,16 +1052,11 @@ int main(int argc, char * argv[])
             rho_var_block[i] = rho_real[entry] - rho_real_block[entry];
             rho_var_block[i] *= rho_var_block[i];
 
-            eacp_var_block[i] = eacp_real[entry] - eacp_real_block[entry];
-            eacp_var_block[i] *= eacp_var_block[i];
-        }
+       }
 
         // reduce variances across parallel procs in blocks
 
         MPI_Allreduce(rho_var_block, rho_var, qm_steps, MPI_DOUBLE,
-            MPI_SUM, var_comm);
-
-        MPI_Allreduce(eacp_var_block, eacp_var, qm_steps, MPI_DOUBLE,
             MPI_SUM, var_comm);
 
         for (int i = 0; i < qm_steps; i++)
@@ -1133,11 +1066,7 @@ int main(int argc, char * argv[])
             rho_var[i] /= (block_num - 1);
             temp = rho_var[i];
             rho_var[i] = sqrt(temp);
-
-            eacp_var[i] /= (block_num - 1);
-            temp = eacp_var[i];
-            eacp_var[i] = sqrt(temp);        
-        }    
+       }    
 
     } // end variance calc clause
 
@@ -1233,25 +1162,9 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "\n");
 
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\nEACP trajectory (time vs. rho(t), std. dev., trace):\n");
-
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\n\n");
-    
-        for (int i = 0; i < qm_steps; i++)
-        {
-            int entry = i*DSTATES*DSTATES;
-
-            fprintf(outfile, "%7.4f %8.5f %6.3f (Tr = %13.10f)\n", (i+1)*dt, 
-                eacp_real[entry], eacp_var[i], eacp_real[entry]+eacp_real[entry+3]);
-        }
-
       } // end output conditional
+
+    // cleanup
 
     delete [] omega;
     delete [] jvals;
@@ -1271,30 +1184,21 @@ int main(int argc, char * argv[])
     for (int i = 0; i < qm_steps; i++)
     {
         delete [] rho_proc[i];
-        delete [] rho_eacp_proc[i];
     }
 
     delete [] rho_proc;
     delete [] rho_ic_proc;
-    delete [] rho_eacp_proc;
     delete [] modes;
     delete [] ref_modes;
     delete [] old_ref_list;
     delete [] rho_real_proc;
     delete [] rho_imag_proc;
-    delete [] eacp_real_proc;
-    delete [] eacp_imag_proc;
     delete [] rho_real;
     delete [] rho_imag;
-    delete [] eacp_real;
-    delete [] eacp_imag;
 
     delete [] rho_real_block;
-    delete [] eacp_real_block;
     delete [] rho_var;
-    delete [] eacp_var;
     delete [] rho_var_block;
-    delete [] eacp_var_block;
 
     delete error;
 
