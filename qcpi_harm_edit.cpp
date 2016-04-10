@@ -59,8 +59,6 @@ const double dvr_right = -1.0;
 // EDIT NOTE: (eliminate dupe with data structs)
 // variables set in config file 
 
-double dt;                              // quantum timestep
-int qm_steps; // = 150;                     // number of quantum steps to use
 int kmax;                                // memory length
 
 int step_pts; // = 100;                // number of action integration points per QM timestep
@@ -226,8 +224,6 @@ int main(int argc, char * argv[])
 
     simData.asym *= kcal_to_hartree;
 
-    dt = simData.dt;
-    qm_steps = simData.qm_steps;
     kmax = simData.kmax;
 
     step_pts = simData.step_pts;
@@ -246,10 +242,10 @@ int main(int argc, char * argv[])
     if (kmax <= 0)
         throw std::runtime_error("kmax must be positive\n");
 
-    if (dt <= 0)
+    if (simData.dt <= 0)
         throw std::runtime_error("Quantum timestep must be positive\n");
 
-    if (qm_steps < kmax)
+    if (simData.qm_steps < kmax)
         throw std::runtime_error("Quantum step number smaller than kmax\n");
 
     if (simData.ic_tot < nprocs)
@@ -381,7 +377,7 @@ int main(int argc, char * argv[])
 
     // define ODE timestep
 
-    rho_dt = dt/chunks;
+    rho_dt = simData.dt/chunks;
 
     // create propagator object
 
@@ -395,10 +391,10 @@ int main(int argc, char * argv[])
 
     // allocate density matrix
 
-    complex<double> ** rho_proc = new complex<double> * [qm_steps];
-    complex<double> * rho_ic_proc = new complex<double> [qm_steps];
+    complex<double> ** rho_proc = new complex<double> * [simData.qm_steps];
+    complex<double> * rho_ic_proc = new complex<double> [simData.qm_steps];
 
-    for (int i = 0; i < qm_steps; i++)
+    for (int i = 0; i < simData.qm_steps; i++)
     {
         rho_proc[i] = new complex<double> [DSTATES*DSTATES];
 
@@ -419,7 +415,7 @@ int main(int argc, char * argv[])
 
     // set up variables to store current and past reference state
 
-    Ref * old_ref_list = new Ref [qm_steps];
+    Ref * old_ref_list = new Ref [simData.qm_steps];
 
     old_ref_list[0] = REF_LEFT;
 
@@ -455,10 +451,8 @@ int main(int argc, char * argv[])
     {
         // zero per-proc rho(t)
 
-        for (int i = 0; i < qm_steps; i++)
-        {
+        for (int i = 0; i < simData.qm_steps; i++)
             rho_ic_proc[i] = 0.0;
-        }
 
         // generate ICs for HOs using MC walk (we use last step's
         // ICs as current step's IC seed)
@@ -662,7 +656,7 @@ int main(int argc, char * argv[])
         // loop over time points beyond kmax
         // and propagate system iteratively
 
-        for (int seg = kmax; seg < qm_steps; seg++)
+        for (int seg = kmax; seg < simData.qm_steps; seg++)
         {
             // choose branch to propagate on stochastically,
             // based on state of system at start of memory span
@@ -891,13 +885,13 @@ int main(int argc, char * argv[])
     // collect real and imag parts of rho into separate
     // arrays for MPI communication
 
-    double * rho_real_proc = new double [qm_steps*DSTATES*DSTATES];
-    double * rho_imag_proc = new double [qm_steps*DSTATES*DSTATES];
+    double * rho_real_proc = new double [simData.qm_steps*DSTATES*DSTATES];
+    double * rho_imag_proc = new double [simData.qm_steps*DSTATES*DSTATES];
 
-    double * rho_real = new double [qm_steps*DSTATES*DSTATES];
-    double * rho_imag = new double [qm_steps*DSTATES*DSTATES];
+    double * rho_real = new double [simData.qm_steps*DSTATES*DSTATES];
+    double * rho_imag = new double [simData.qm_steps*DSTATES*DSTATES];
 
-    for (int i = 0; i < qm_steps; i++)
+    for (int i = 0; i < simData.qm_steps; i++)
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
@@ -911,15 +905,15 @@ int main(int argc, char * argv[])
 
     // Allreduce the real and imaginary arrays
 
-    MPI_Allreduce(rho_real_proc, rho_real, qm_steps*DSTATES*DSTATES,
+    MPI_Allreduce(rho_real_proc, rho_real, simData.qm_steps*DSTATES*DSTATES,
         MPI_DOUBLE, MPI_SUM, w_comm);
 
-    MPI_Allreduce(rho_imag_proc, rho_imag, qm_steps*DSTATES*DSTATES,
+    MPI_Allreduce(rho_imag_proc, rho_imag, simData.qm_steps*DSTATES*DSTATES,
         MPI_DOUBLE, MPI_SUM, w_comm);
 
     // scale arrays by Monte Carlo factor
 
-    for (int i = 0; i < qm_steps; i++)
+    for (int i = 0; i < simData.qm_steps; i++)
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
@@ -944,9 +938,9 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "\n\n");
 
-        fprintf(outfile, "Quantum steps: %d\n", qm_steps);
+        fprintf(outfile, "Quantum steps: %d\n", simData.qm_steps);
         fprintf(outfile, "Memory length (kmax): %d\n", kmax);
-        fprintf(outfile, "Step length (a.u): %.5f\n", dt);
+        fprintf(outfile, "Step length (a.u): %.5f\n", simData.dt);
         fprintf(outfile, "IC num: %d\n", simData.ic_tot);
         fprintf(outfile, "RNG seed: %lu\n", seed);
         fprintf(outfile, "MC skip: %ld\n", simData.mc_steps);
@@ -958,7 +952,7 @@ int main(int argc, char * argv[])
         fprintf(outfile, "Input spectral density: %s\n", simData.infile);
         fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
 
-        fprintf(outfile, "Total simulated time (a.u.): %.4f\n", qm_steps*dt);
+        fprintf(outfile, "Total simulated time (a.u.): %.4f\n", simData.qm_steps*simData.dt);
 
         fprintf(outfile, "Processors: %d\n\n", nprocs);
         fprintf(outfile, "Total simulation time: %.3f min\n\n", g_runtime/60.0);
@@ -1005,11 +999,11 @@ int main(int argc, char * argv[])
         fprintf(outfile, "\n\n");
 
        
-            for (int i = 0; i < qm_steps; i++)
+            for (int i = 0; i < simData.qm_steps; i++)
             {
                 int entry = i*DSTATES*DSTATES;
 
-                fprintf(outfile, "%7.4f %8.5f %6.3f (Tr = %13.10f)\n", (i+1)*dt, 
+                fprintf(outfile, "%7.4f %8.5f %6.3f (Tr = %13.10f)\n", (i+1)*simData.dt, 
                     rho_real[entry], 0.0, rho_real[entry]+rho_real[entry+3]);
             }
 
@@ -1035,7 +1029,7 @@ int main(int argc, char * argv[])
     delete [] curr_prop.ptemp;
     delete [] curr_prop.ham;
 
-    for (int i = 0; i < qm_steps; i++)
+    for (int i = 0; i < simData.qm_steps; i++)
     {
         delete [] rho_proc[i];
     }
@@ -1801,8 +1795,8 @@ double dist(double x_old, double x_new, double p_old, double p_new,
 void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state, 
         SimInfo & simData)
 {
-    double del_t = dt/2.0;
-    double chunk_dt = dt/chunks;
+    double del_t = simData.dt/2.0;
+    double chunk_dt = simData.dt/chunks;
 
     for (int mode = 0; mode < simData.bath_modes; mode++)
     {
@@ -1956,7 +1950,7 @@ void build_ham(Propagator & prop, Mode * modes, int chunk, SimInfo & simData)
 
 void qcpi_update_exact(Path & qm_path, Mode * mlist, SimInfo & simData)
 {
-    double del_t = dt/2.0;
+    double del_t = simData.dt/2.0;
     double dvr_vals[DSTATES] = {dvr_left, dvr_right};
 
     for (int mode = 0; mode < simData.bath_modes; mode++)
