@@ -4,7 +4,7 @@
 
 2.) Remove all-caps flags (DONE)
 
-2.5) Test code to make sure it compiles and runs (and reg test)
+2.5) Test code to make sure it compiles and passes reg test (DONE)
 
 2.75) Remove fake EACP functionality and fixed ref option
 
