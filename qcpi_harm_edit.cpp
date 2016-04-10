@@ -22,7 +22,6 @@
 //         dvr_left = 0.0 and dvr_right = -2.0. Other desired 
 //          shifts can be extrapolated from this example.
 
-#include <iostream>
 #include <fstream>
 #include <vector>
 #include <map>
@@ -32,7 +31,6 @@
 #include <cmath>
 #include <cstring>
 #include <mpi.h>
-#include "error.h"
 #include <stdexcept>
 #include <gsl/gsl_rng.h>
 
@@ -140,7 +138,6 @@ struct SimInfo
     double bath_temp;
     char infile[FLEN];
     char outfile[FLEN];
-    char backupname[FLEN];
 };
 
 struct FlagInfo
@@ -153,7 +150,7 @@ struct FlagInfo
 // EDIT NOTES: (clean up function list and move to header)
 
 // startup and helper functions
-void startup(char *, struct SimInfo *, struct FlagInfo *, 
+void startup(std::string, struct SimInfo *, struct FlagInfo *, 
         MPI_Comm);
 char * nextword(char *, char **);
 void print_header(const char *, const char *, int, FILE *);
@@ -207,21 +204,17 @@ int main(int argc, char * argv[])
     MPI_Comm_rank(w_comm, &me);
     MPI_Comm_size(w_comm, &nprocs);
 
-    Error * error = new Error(w_comm);
-
     // process arguments, format should be:
     //      mpirun -n <proc_num> ./prog_name <config_file>
 
     if (argc < 2)
     {
-        char errstr[FLEN];
-        sprintf(errstr, "Usage: %s <config_file>", argv[0]);
-        error->all(errstr);
+        std::string exe_name = argv[0];
+        throw std::runtime_error("Usage: " + exe_name + " <config_file>\n");
     }
+    std::string config_file;   
 
-    char config_file[FLEN];   
-
-    sprintf(config_file, "%s", argv[1]);
+    config_file = argv[1];
 
     // create structs to hold configuration parameters
 
@@ -230,7 +223,7 @@ int main(int argc, char * argv[])
 
     // assign values to config. vars
 
-    startup(config_file, &simData, &flagData, w_comm);
+    startup(config_file.c_str(), &simData, &flagData, w_comm);
 
     // set global parameters from startup() output
 
@@ -253,30 +246,20 @@ int main(int argc, char * argv[])
 
     seed = flagData.seed;
 
-    // set some index data manually
-
-    char tmpname[FLEN];
-
-    sprintf(tmpname, "%s", simData.outfile);
-
-    char * tmpfile = strtok(tmpname, ".");
-
-    sprintf(simData.backupname, "%s", tmpfile);
-
     // EDIT NOTE: (these should be moved to startup function)
     // sanity checks
 
     if (kmax <= 0)
-        error->all("kmax must be positive");
+        throw std::runtime_error("kmax must be positive\n");
 
     if (dt <= 0)
-        error->all("Quantum timestep must be positive");
+        throw std::runtime_error("Quantum timestep must be positive\n");
 
     if (qm_steps < kmax)
-        error->all("Quantum step number smaller than kmax");
+        throw std::runtime_error("Quantum step number smaller than kmax\n");
 
     if (ic_tot < nprocs)
-        error->all("Too few ICs for processor number");
+        throw std::runtime_error("Too few ICs for processor number\n");
 
     // make sure MC run is long enough
 
@@ -292,10 +275,9 @@ int main(int argc, char * argv[])
 
     if (infile == NULL)
     {
-        char errstr[FLEN];
-        sprintf(errstr, "Could not open file %s",
-            simData.infile);
-        error->one(errstr);
+        std::string input_file = simData.infile;
+        throw std::runtime_error("Could not open file " + 
+                input_file + "\n");
     }
 
     // only open output file on I/O proc
@@ -306,10 +288,9 @@ int main(int argc, char * argv[])
 
         if (outfile == NULL)
         {
-            char errstr[FLEN];
-            sprintf(errstr, "Could not open file %s",
-                simData.outfile);
-            error->one(errstr);
+            std::string output_file = simData.outfile;
+            throw std::runtime_error("Could not open file " + 
+                    output_file + "\n");
         }
     }
 
@@ -352,7 +333,7 @@ int main(int argc, char * argv[])
     int my_ics;
 
     if (ic_tot < nprocs)
-        error->all("Too few ICs for processor group");
+        throw std::runtime_error("Too few ICs for processor group\n");
 
     if (remain == 0)
         my_ics = base_share;
@@ -439,6 +420,8 @@ int main(int argc, char * argv[])
     vector<Path> tempList;
 
     Path pstart;
+
+    // EDIT NOTES: (change old_ref_list to queue type?)
 
     // set up variables to store current and past reference state
 
@@ -1072,8 +1055,6 @@ int main(int argc, char * argv[])
     delete [] rho_real;
     delete [] rho_imag;
 
-    delete error;
-
     MPI_Finalize();
 
     return 0;
@@ -1084,10 +1065,9 @@ int main(int argc, char * argv[])
 // EDIT NOTES: (get rid of LAMMPS-based tokenizing)
 // startup() -- read in and process configuration file 
 
-void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag, 
+void startup(std::string config, struct SimInfo * sim, struct FlagInfo * flag, 
         MPI_Comm comm)
 {
-    Error * error = new Error(comm);
     int me;
 
     MPI_Comm_rank(comm, &me);
@@ -1135,9 +1115,9 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
 
     bool reqflg;
 
-    conf_file.open(config, ios_base::in);
+    conf_file.open(config.c_str(), ios_base::in);
     if (!conf_file.is_open())
-        error->one("Could not open configuration file");
+        throw std::runtime_error("Could not open configuration file\n");
 
     // read in file line-by-line
 
@@ -1265,13 +1245,13 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
     if (!reqflg)
     {
         if (!timeflg)
-            error->all("Must specify number of quantum steps and timestep values");
+            throw std::runtime_error("Must specify number of quantum steps and timestep values\n");
 
         if (!simflg)
-            error->all("Must specify number of ICs, kmax, and bath temperature");
+            throw std::runtime_error("Must specify number of ICs, kmax, and bath temperature\n"); 
 
         if (!fileflg)
-            error->all("Must specify spectral density input file, and data output file");
+            throw std::runtime_error("Must specify spectral density input file, and data output file\n");
     }
 
     // ensure consistency of step_pts and chunk values
@@ -1283,43 +1263,42 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
     // check positive-definite quantities
 
     if (sim->bath_modes <= 0)
-        error->all("Bath oscillator number must be positive");
+        throw std::runtime_error("Bath oscillator number must be positive\n");
 
     if (sim->ic_tot <= 0)
-        error->all("Number of ICs must be positive");
+        throw std::runtime_error("Number of ICs must be positive\n");
 
     if (sim->dt <= 0)
-        error->all("Timestep must be positive");
+        throw std::runtime_error("Timestep must be positive\n");
 
     if (sim->qm_steps <= 0)
-        error->all("Total simulation steps must be positive");
+        throw std::runtime_error("Total simulation steps must be positive\n");
 
     if (sim->kmax <= 0)
-        error->all("Kmax segments must be positive");
+        throw std::runtime_error("Kmax segments must be positive\n");
 
     if (sim->step_pts <= 0)
-        error->all("Numer of action integration points must be positive");
+        throw std::runtime_error("Numer of action integration points must be positive\n");
 
     if (sim->chunks <= 0)
-        error->all("Action chunk number must be positive");
+        throw std::runtime_error("Action chunk number must be positive\n");
 
     if (sim->rho_steps <= 0)
-        error->all("Number of ODE steps for rho(t) must be positive");
+        throw std::runtime_error("Number of ODE steps for rho(t) must be positive\n");
 
     if (sim->bath_temp <= 0)
-        error->all("Bath temperature must be positive");
+        throw std::runtime_error("Bath temperature must be positive\n");
 
     // check non-negative quantities
 
     if (sim->mc_steps < 0)
-        error->all("Monte Carlo burn length can't be negative");
+        throw std::runtime_error("Monte Carlo burn length can't be negative\n");
 
     // ensure kmax < total steps
 
     if (sim->kmax > sim->qm_steps)
-        error->all("Memory length cannot exceed total simulation time");
+        throw std::runtime_error("Memory length cannot exceed total simulation time\n");
     
-    delete error;
     conf_file.close();
 }
 
@@ -1341,24 +1320,20 @@ char * nextword(char *str, char **next)
 {
   char *start,*stop;
 
-  Error * error = new Error(MPI_COMM_WORLD);
-  
   start = &str[strspn(str," \t\n\v\f\r")];
   if (*start == '\0') return NULL;
   
   if (*start == '"' || *start == '\'') {
     stop = strchr(&start[1],*start);
-    if (!stop) error->all("Unbalanced quotes in input line");
+    if (!stop) throw std::runtime_error("Unbalanced quotes in input line\n");
     if (stop[1] && !isspace(stop[1]))
-      error->all("Input line quote not followed by whitespace");
+      throw std::runtime_error("Input line quote not followed by whitespace\n");
     start++;
   } else stop = &start[strcspn(start," \t\n\v\f\r")];
   
   if (*stop == '\0') *next = NULL;
   else *next = stop+1;
   *stop = '\0';
-
-  delete error;
 
   return start;
 }
@@ -1445,8 +1420,6 @@ void get_spec(FILE * fp, double * omega, double * jvals)
 double bath_setup(double * omega, double * jvals, double * bath_freq, long pts,
     int nmodes)
 {
-    Error * error = new Error(MPI_COMM_WORLD);
-
     // first calculate reorg energy via simple integration
 
     double dw = omega[1] - omega[0];    // assumes uniform spacing
@@ -1511,15 +1484,9 @@ double bath_setup(double * omega, double * jvals, double * bath_freq, long pts,
             }
 
             if (bath_freq[i] == 0)
-            {
-                char errstr[FLEN];
-                sprintf(errstr, "All modes have zero frequency");
-                error->one(errstr);
-            }
+                throw std::runtime_error("All modes have zero frequency\n");
         }
     }
-
-    delete error;
 
     return w0;
 }
@@ -1537,8 +1504,6 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
     const int tsteps = 1000;
     double * x_vals = new double [nmodes];
     double * p_vals = new double [nmodes];
-
-    Error * error = new Error(MPI_COMM_WORLD);
 
     // initialize step sizes and (x,p) at minimum of x
 
@@ -1632,7 +1597,7 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
         } // end while loop
 
         if (count >= max_trials)
-            error->one("Failed to properly converge MC optimization in x-coord.");
+            throw std::runtime_error("Failed to properly converge MC optimization in x-coord.\n");
 
     } // end x calibration
 
@@ -1721,7 +1686,7 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
         } // end while loop
 
         if (count >= max_trials)
-            error->one("Failed to converge MC optimization in p-coord.");
+            throw std::runtime_error("Failed to converge MC optimization in p-coord.\n");
 
     } // end p tweak
 

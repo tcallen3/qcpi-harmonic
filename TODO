@@ -8,14 +8,17 @@
 
 2.75) Remove fake EACP functionality and fixed ref option (DONE)
 
-3.) Eliminate blocking and block avg/var
+3.) Eliminate blocking and block avg/var (DONE)
 
-4.) Factor structure definitions and function declarations into
-    separate files
+4.) Go through code in order and address issues (global vars, function
+    prototypes, vectors vs. pointers, etc.)
 
-5.) Eliminate dupe print statements
+5.) Refactor code to use vectors and structs in place of bare
+    allocated arrays
 
 6.) Remove code from copyrighted and GPL'd sources
 
-7.) Refactor code to use vectors and structs in place of bare
-    allocated arrays
+7.) Rewrite functions for greater clarity (e.g. using Boost)
+
+8.) Factor structure definitions and function declarations into
+    separate files
