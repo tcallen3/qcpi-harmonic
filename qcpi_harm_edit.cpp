@@ -58,10 +58,6 @@ const double dvr_right = -1.0;
 
 // EDIT NOTE: (eliminate dupe with data structs)
 // variables set in config file 
-double asym; // = 0.5 * kcal_to_hartree;    // system asymmetry
-int nmodes; // = 60;                  // number of hbath modes
-long steps; // = 50000;               // number of MC steps for IC equil (was 500k).
-int ic_tot; // = 30;                  // number of ICs to use
 
 double dt;                              // quantum timestep
 int qm_steps; // = 150;                     // number of quantum steps to use
@@ -163,14 +159,15 @@ void get_spec(FILE *, double *, double *);
 double bath_setup(double *, double *, double *, long, int);
 
 // funcs to perform MC walk
-void calibrate_mc(double *, double *, double *, double *, gsl_rng *);
-double ic_gen(double *, double *, double *, double *, double *, double *, gsl_rng *);
+void calibrate_mc(double *, double *, double *, double *, gsl_rng *, SimInfo &);
+double ic_gen(double *, double *, double *, double *, double *, double *, 
+        gsl_rng *, SimInfo &);
 double dist(double, double, double, double, double, double);
 
 // EDIT NOTE: (Need to remove NR ODE functions and reimplement)
 // propagator integration
-void ho_update_exact(Propagator &, Mode *, double);
-void build_ham(Propagator &, Mode *, int);
+void ho_update_exact(Propagator &, Mode *, double, SimInfo &);
+void build_ham(Propagator &, Mode *, int, SimInfo &);
 void prop_eqns(double, complex<double> *, complex<double> *, void *);
 void rk4(complex<double> * y, complex<double> * dydx, int n, double x, double h, 
     complex<double> * yout, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params);
@@ -178,8 +175,8 @@ void rkdriver(complex<double> * vstart, complex<double> * out, int nvar, double 
     double x2, int nstep, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params);
 
 // QCPI functions
-void qcpi_update_exact(Path &, Mode *);
-double action_calc_exact(Path &, Mode *, Mode *);
+void qcpi_update_exact(Path &, Mode *, SimInfo &);
+double action_calc_exact(Path &, Mode *, Mode *, SimInfo &);
 
 // simple matrix multiply
 void mat_mul(complex<double> *, complex<double> *, complex<double> *, int);
@@ -227,10 +224,7 @@ int main(int argc, char * argv[])
 
     // set global parameters from startup() output
 
-    asym = simData.asym * kcal_to_hartree;
-    nmodes = simData.bath_modes;
-    steps = simData.mc_steps;
-    ic_tot = simData.ic_tot;
+    simData.asym *= kcal_to_hartree;
 
     dt = simData.dt;
     qm_steps = simData.qm_steps;
@@ -258,13 +252,13 @@ int main(int argc, char * argv[])
     if (qm_steps < kmax)
         throw std::runtime_error("Quantum step number smaller than kmax\n");
 
-    if (ic_tot < nprocs)
+    if (simData.ic_tot < nprocs)
         throw std::runtime_error("Too few ICs for processor number\n");
 
     // make sure MC run is long enough
 
-    if (steps < mc_buff * nmodes)
-        steps = mc_buff * nmodes;
+    if (simData.mc_steps < mc_buff * simData.bath_modes)
+        simData.mc_steps = mc_buff * simData.bath_modes;
 
     // open files for I/O
 
@@ -309,16 +303,16 @@ int main(int argc, char * argv[])
 
     // discretize bath modes
 
-    double * bath_freq = new double [nmodes];
-    double * bath_coup = new double [nmodes];
+    double * bath_freq = new double [simData.bath_modes];
+    double * bath_coup = new double [simData.bath_modes];
 
-    double w0 = bath_setup(omega, jvals, bath_freq, npoints, nmodes);
+    double w0 = bath_setup(omega, jvals, bath_freq, npoints, simData.bath_modes);
 
     // calculate couplings from frequencies
 
     double pi = acos(-1.0);
 
-    for (int i = 0; i < nmodes; i++)
+    for (int i = 0; i < simData.bath_modes; i++)
         bath_coup[i] = sqrt(2.0*w0/pi) * bath_freq[i];
 
     // EDIT NOTES: (enforce even division in code)
@@ -328,11 +322,11 @@ int main(int argc, char * argv[])
     // a block; otherwise we give remainder out block-cyclically
     // with blocksize 1
     
-    int base_share = ic_tot/nprocs;
-    int remain = ic_tot % nprocs;
+    int base_share = simData.ic_tot/nprocs;
+    int remain = simData.ic_tot % nprocs;
     int my_ics;
 
-    if (ic_tot < nprocs)
+    if (simData.ic_tot < nprocs)
         throw std::runtime_error("Too few ICs for processor group\n");
 
     if (remain == 0)
@@ -345,11 +339,11 @@ int main(int argc, char * argv[])
             my_ics = base_share;
     }
 
-    double * xvals = new double [nmodes];
-    double * pvals = new double [nmodes];
+    double * xvals = new double [simData.bath_modes];
+    double * pvals = new double [simData.bath_modes];
 
-    double * x_step = new double [nmodes];
-    double * p_step = new double [nmodes];
+    double * x_step = new double [simData.bath_modes];
+    double * p_step = new double [simData.bath_modes];
 
     // initialize RNG; can change seed to change trajectory behavior
 
@@ -365,11 +359,11 @@ int main(int argc, char * argv[])
 
     // run test MC trials to determine optimal step sizes
 
-    calibrate_mc(x_step, p_step, bath_freq, bath_coup, gen);
+    calibrate_mc(x_step, p_step, bath_freq, bath_coup, gen, simData);
 
     // initialize IC arrays
 
-    for (int i = 0; i < nmodes; i++)
+    for (int i = 0; i < simData.bath_modes; i++)
     {
         if (gsl_rng_uniform_int(gen, 2) == 0)
             xvals[i] = bath_coup[i] * ( dvr_left/(mass*bath_freq[i]*bath_freq[i]) ) +
@@ -431,10 +425,10 @@ int main(int argc, char * argv[])
 
     // initialize harmonic bath arrays
 
-    Mode * modes = new Mode [nmodes];
-    Mode * ref_modes = new Mode [nmodes];
+    Mode * modes = new Mode [simData.bath_modes];
+    Mode * ref_modes = new Mode [simData.bath_modes];
 
-    for (int i = 0; i < nmodes; i++)
+    for (int i = 0; i < simData.bath_modes; i++)
     {
         modes[i].omega = bath_freq[i];
         modes[i].c = bath_coup[i];
@@ -469,7 +463,8 @@ int main(int argc, char * argv[])
         // generate ICs for HOs using MC walk (we use last step's
         // ICs as current step's IC seed)
 
-        double ratio = ic_gen(xvals, pvals, bath_freq, bath_coup, x_step, p_step, gen);
+        double ratio = ic_gen(xvals, pvals, bath_freq, bath_coup, 
+                x_step, p_step, gen, simData);
 
         // for time points < kmax
 
@@ -484,15 +479,15 @@ int main(int argc, char * argv[])
         pstart.fwd_path.push_back(0);   // left-localized
         pstart.bwd_path.push_back(0);   // left-localized
         pstart.product = 1.0;
-        pstart.x0.assign(xvals, xvals+nmodes);
-        pstart.p0.assign(pvals, pvals+nmodes);
+        pstart.x0.assign(xvals, xvals+simData.bath_modes);
+        pstart.p0.assign(pvals, pvals+simData.bath_modes);
 
         pathList.push_back(pstart);
 
         // initialize propagator ICs
 
-        curr_prop.x0_free.assign(xvals, xvals+nmodes);
-        curr_prop.p0_free.assign(pvals, pvals+nmodes);
+        curr_prop.x0_free.assign(xvals, xvals+simData.bath_modes);
+        curr_prop.p0_free.assign(pvals, pvals+simData.bath_modes);
 
         // loop over first kmax time points
 
@@ -545,7 +540,7 @@ int main(int argc, char * argv[])
 
             // EDIT NOTES: (rename ho_update fns to something better)
 
-            ho_update_exact(curr_prop, ref_modes, ho_ref_state);
+            ho_update_exact(curr_prop, ref_modes, ho_ref_state, simData);
 
                 // chunk trajectory into pieces for greater
                 // accuracy in integrating U(t)
@@ -554,7 +549,7 @@ int main(int argc, char * argv[])
             {
                 // construct H(x,p) from bath configuration
             
-                build_ham(curr_prop, ref_modes, chunk_num);
+                build_ham(curr_prop, ref_modes, chunk_num, simData);
 
                 // integrate TDSE for U(t) w/ piece-wise constant
                 // Hamiltonian approx.
@@ -579,13 +574,13 @@ int main(int argc, char * argv[])
                 // calculate x(t) and p(t) at integration points
                 // along all paths
 
-                qcpi_update_exact(pathList[path], modes);
+                qcpi_update_exact(pathList[path], modes, simData);
 
                 // use integration points to find new phase contribution
 
                 double phi;
 
-                phi = action_calc_exact(pathList[path], modes, ref_modes);
+                phi = action_calc_exact(pathList[path], modes, ref_modes, simData);
 
                 // EDIT NOTES: (block this into function)
                 // calculate proper rho contribution
@@ -718,7 +713,7 @@ int main(int argc, char * argv[])
 
             // first find unforced (x,p)
 
-            ho_update_exact(curr_prop, ref_modes, ho_ref_state);
+            ho_update_exact(curr_prop, ref_modes, ho_ref_state, simData);
 
             // chunk trajectory into pieces for greater
             // accuracy in integrating U(t)
@@ -727,7 +722,7 @@ int main(int argc, char * argv[])
             {
                 // construct H(x,p) from bath configuration
             
-                build_ham(curr_prop, ref_modes, chunk_num);
+                build_ham(curr_prop, ref_modes, chunk_num, simData);
 
                 // integrate TDSE for U(t) w/ piece-wise constant
                 // Hamiltonian approx.
@@ -788,13 +783,13 @@ int main(int argc, char * argv[])
                         // calculate x(t) and p(t) at integration points
                         // along new path (note this changes x0, p0 in temp)
 
-                        qcpi_update_exact(temp, modes);
+                        qcpi_update_exact(temp, modes, simData);
 
                         // use integration points to find new phase contribution
 
                         double phi;
 
-                        phi = action_calc_exact(temp, modes, ref_modes);
+                        phi = action_calc_exact(temp, modes, ref_modes, simData);
 
                         // calculate proper rho contribution
 
@@ -928,8 +923,8 @@ int main(int argc, char * argv[])
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
-            rho_real[i*DSTATES*DSTATES+j] /= ic_tot;
-            rho_imag[i*DSTATES*DSTATES+j] /= ic_tot;
+            rho_real[i*DSTATES*DSTATES+j] /= simData.ic_tot;
+            rho_imag[i*DSTATES*DSTATES+j] /= simData.ic_tot;
         }
     }
 
@@ -952,16 +947,16 @@ int main(int argc, char * argv[])
         fprintf(outfile, "Quantum steps: %d\n", qm_steps);
         fprintf(outfile, "Memory length (kmax): %d\n", kmax);
         fprintf(outfile, "Step length (a.u): %.5f\n", dt);
-        fprintf(outfile, "IC num: %d\n", ic_tot);
+        fprintf(outfile, "IC num: %d\n", simData.ic_tot);
         fprintf(outfile, "RNG seed: %lu\n", seed);
-        fprintf(outfile, "MC skip: %ld\n", steps);
+        fprintf(outfile, "MC skip: %ld\n", simData.mc_steps);
 
         fprintf(outfile, "Analytic trajectory integration: on\n");
 
         fprintf(outfile, "Simulation used EACP reference hopping\n");
 
         fprintf(outfile, "Input spectral density: %s\n", simData.infile);
-        fprintf(outfile, "Configuration file: %s\n\n", config_file);
+        fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
 
         fprintf(outfile, "Total simulated time (a.u.): %.4f\n", qm_steps*dt);
 
@@ -978,7 +973,7 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "\n\n");
 
-        fprintf(outfile, "Bath modes: %d\n", nmodes);
+        fprintf(outfile, "Bath modes: %d\n", simData.bath_modes);
         fprintf(outfile, "Bath temperature: %.2f\n", bath_temp);
         fprintf(outfile, "Inverse temperature: %.4f\n", beta);
         fprintf(outfile, "Bath mode mass parameter: %.3f\n", mass);
@@ -995,7 +990,7 @@ int main(int argc, char * argv[])
         fprintf(outfile, "\n\n");
 
         fprintf(outfile, "Off-diagonal TLS element: %f\n", tls_freq);
-        fprintf(outfile, "Asymmetry: %.7e hartree\n", asym);
+        fprintf(outfile, "Asymmetry: %.7e hartree\n", simData.asym);
         fprintf(outfile, "Left DVR state: %.3f\n", dvr_left);
         fprintf(outfile, "Right DVR state: %.3f\n\n", dvr_right);
 
@@ -1494,7 +1489,7 @@ double bath_setup(double * omega, double * jvals, double * bath_freq, long pts,
 /*----------------------------------------------------------------------*/
 
 void calibrate_mc(double * x_step, double * p_step, double * bath_freq, 
-    double * bath_coup, gsl_rng * gen)
+    double * bath_coup, gsl_rng * gen, SimInfo & simData)
 {
     const double max_trials = 1000;
     const double base_step = 10.0;
@@ -1502,12 +1497,12 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
     const double low_thresh = 0.45;
     const double high_thresh = 0.55;
     const int tsteps = 1000;
-    double * x_vals = new double [nmodes];
-    double * p_vals = new double [nmodes];
+    double * x_vals = new double [simData.bath_modes];
+    double * p_vals = new double [simData.bath_modes];
 
     // initialize step sizes and (x,p) at minimum of x
 
-    for (int i = 0; i < nmodes; i++)
+    for (int i = 0; i < simData.bath_modes; i++)
     {
         x_step[i] = gsl_rng_uniform(gen) * base_step;
         p_step[i] = gsl_rng_uniform(gen) * base_step;
@@ -1521,7 +1516,7 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
 
     // run MC step tweaking for each mode and phase space dim. separately
 
-    for (int i = 0; i < nmodes; i++)
+    for (int i = 0; i < simData.bath_modes; i++)
     {
         int count = 0;
 
@@ -1603,7 +1598,7 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
 
     // begin calibrating p steps
 
-    for (int i = 0; i < nmodes; i++)
+    for (int i = 0; i < simData.bath_modes; i++)
     {
         x_vals[i] = bath_coup[i] * ( dvr_left/(mass*bath_freq[i]*bath_freq[i]) );
         p_vals[i] = 0.0;
@@ -1611,7 +1606,7 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
 
     // run MC step tweaking for each mode 
 
-    for (int i = 0; i < nmodes; i++)
+    for (int i = 0; i < simData.bath_modes; i++)
     {
         int count = 0;
 
@@ -1697,7 +1692,7 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
 /* ------------------------------------------------------------------------ */
 
 double ic_gen(double * xvals, double * pvals, double * bath_freq, double * bath_coup,
-    double * x_step, double * p_step, gsl_rng * gen)
+    double * x_step, double * p_step, gsl_rng * gen, SimInfo & simData)
 {   
     //double step_max = range/100.0;
 
@@ -1706,12 +1701,12 @@ double ic_gen(double * xvals, double * pvals, double * bath_freq, double * bath_
 
     long accepted = 1;
 
-    for (long i = 1; i < steps; i++)
+    for (long i = 1; i < simData.mc_steps; i++)
     { 
         // randomly select index to step, and generate
         // step size in x and p dimension
 
-        int index = gsl_rng_uniform_int(gen, nmodes);
+        int index = gsl_rng_uniform_int(gen, simData.bath_modes);
         double x_len = gsl_rng_uniform(gen) * x_step[index];
         double p_len = gsl_rng_uniform(gen) * p_step[index];
 
@@ -1767,7 +1762,7 @@ double ic_gen(double * xvals, double * pvals, double * bath_freq, double * bath_
 
     }
 
-    double ratio = static_cast<double>(accepted)/steps;
+    double ratio = static_cast<double>(accepted)/simData.mc_steps;
 
     return ratio;
 }
@@ -1803,12 +1798,13 @@ double dist(double x_old, double x_new, double p_old, double p_new,
 
 /* ------------------------------------------------------------------------ */
 
-void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state)
+void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state, 
+        SimInfo & simData)
 {
     double del_t = dt/2.0;
     double chunk_dt = dt/chunks;
 
-    for (int mode = 0; mode < nmodes; mode++)
+    for (int mode = 0; mode < simData.bath_modes; mode++)
     {
         double x0, xt;
         double p0, pt;
@@ -1888,7 +1884,7 @@ void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state)
 // construct system-bath Hamiltonian for
 // current timestep
 
-void build_ham(Propagator & prop, Mode * modes, int chunk)
+void build_ham(Propagator & prop, Mode * modes, int chunk, SimInfo & simData)
 {
     // copy off-diagonal from anharmonic code
     const double off_diag = hbar*tls_freq;
@@ -1911,10 +1907,10 @@ void build_ham(Propagator & prop, Mode * modes, int chunk)
     // note that signs should be standard b/c I'm using
     // (-1,+1) instead of (+1,-1)
 
-    tls_mat[0] = asym; //dvr_left*(1.0*asym);
+    tls_mat[0] = simData.asym; //dvr_left*(1.0*asym);
     tls_mat[1] = -1.0*off_diag;
     tls_mat[2] = -1.0*off_diag;
-    tls_mat[3] = -1.0*asym; //dvr_right*(1.0*asym);
+    tls_mat[3] = -1.0*simData.asym; //dvr_right*(1.0*asym);
 
     // system-bath matrix includes linear coupling plus
     // quadratic offset
@@ -1924,7 +1920,7 @@ void build_ham(Propagator & prop, Mode * modes, int chunk)
     left_sum = 0.0;
     right_sum = 0.0;
 
-    for (int i = 0; i < nmodes; i++)
+    for (int i = 0; i < simData.bath_modes; i++)
     {
         double csquare = modes[i].c*modes[i].c;
         double wsquare = modes[i].omega*modes[i].omega;
@@ -1958,12 +1954,12 @@ void build_ham(Propagator & prop, Mode * modes, int chunk)
 
 /* ------------------------------------------------------------------------ */
 
-void qcpi_update_exact(Path & qm_path, Mode * mlist)
+void qcpi_update_exact(Path & qm_path, Mode * mlist, SimInfo & simData)
 {
     double del_t = dt/2.0;
     double dvr_vals[DSTATES] = {dvr_left, dvr_right};
 
-    for (int mode = 0; mode < nmodes; mode++)
+    for (int mode = 0; mode < simData.bath_modes; mode++)
     {
         // set up ICs for first half of path
 
@@ -2036,7 +2032,8 @@ void qcpi_update_exact(Path & qm_path, Mode * mlist)
 
 /* ------------------------------------------------------------------------- */
 
-double action_calc_exact(Path & qm_path, Mode * mlist, Mode * reflist)
+double action_calc_exact(Path & qm_path, Mode * mlist, Mode * reflist, 
+        SimInfo & simData)
 {
     double dvr_vals[DSTATES] = {dvr_left, dvr_right};
 
@@ -2045,7 +2042,7 @@ double action_calc_exact(Path & qm_path, Mode * mlist, Mode * reflist)
 
     double action = 0.0;
 
-    for (int mode = 0; mode < nmodes; mode++)
+    for (int mode = 0; mode < simData.bath_modes; mode++)
     {
         double sum = 0.0;
 
