@@ -128,8 +128,6 @@ struct SimInfo
 {
     // basic simulation params
 
-    bool fixed_ref;          // determines if we used fixed or hopping EACP
-    double ref_state;        // what state used for fixed-ref EACP
     Branch branch_state;     // what state to use for iterative branching
     double asym;
     int bath_modes;
@@ -727,24 +725,6 @@ int main(int argc, char * argv[])
             // using stochastically determined branching
             // and harmonic reference states
 
-            if (simData.fixed_ref)
-            {
-                ho_ref_state = simData.ref_state;
-                
-                if (simData.branch_state == BRANCH_LEFT)
-                    fRand = bRand = 0;
-                else if (simData.branch_state == BRANCH_MID)
-                {
-                    // following assumes DSTATES = 2
-
-                    fRand = static_cast<unsigned>(gsl_rng_uniform_int(gen,DSTATES));
-                    bRand = 1 - fRand;
-                }
-                else
-                    fRand = bRand = 1;
-            }
-            else
-            {
                 double xi = gsl_rng_uniform(gen);
 
                 // choose reference state for EACP
@@ -769,7 +749,6 @@ int main(int argc, char * argv[])
                 else
                     fRand = bRand = 1;
 
-            } // end EACP reference choice clause
 
             // integrate unforced equations and find U(t)
 
@@ -1095,11 +1074,7 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "Analytic trajectory integration: on\n");
 
-        if (simData.fixed_ref)
-            fprintf(outfile, "Simulation used EACP reference fixed at point: %.4f\n", 
-                simData.ref_state);
-        else
-            fprintf(outfile, "Simulation used EACP reference hopping\n");
+        fprintf(outfile, "Simulation used EACP reference hopping\n");
 
         fprintf(outfile, "Input spectral density: %s\n", simData.infile);
         fprintf(outfile, "Configuration file: %s\n\n", config_file);
@@ -1229,8 +1204,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
 
     // set defaults
 
-    sim->fixed_ref = false;         // default to hopping EACP
-    sim->ref_state = dvr_left;      // defaults to reactant EACP reference
     sim->branch_state = BRANCH_LEFT; // defaults to left state branch
     sim->asym = 0.5;                // system asymmetry (in kcal/mol)
     sim->bath_modes = 60;           // number of bath oscillators
@@ -1341,41 +1314,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
 
             if (sim->block_num <= 0)
                 sim->block_num = 1;
-        }
-
-        else if (strcmp(arg1, "fixed_ref") == 0)
-        {
-            // set EACP as fixed or hopping
-
-            if (strcmp(arg2, "on") == 0)
-                sim->fixed_ref = true;
-            else if (strcmp(arg2, "off") == 0)
-                sim->fixed_ref = false;
-            else
-                error->all("Unrecognized EACP reference option");
-        }
-
-        else if (strcmp(arg1, "ref_state") == 0)
-        {
-            // set EACP reference (for fixed-reference runs)
-
-            if (strcmp(arg2, "left") == 0)
-            {
-                sim->ref_state = dvr_left;
-                sim->branch_state = BRANCH_LEFT;
-            }
-            else if (strcmp(arg2, "mid") == 0)
-            {
-                sim->ref_state = (dvr_left + dvr_right)/2.0;
-                sim->branch_state = BRANCH_MID;
-            }
-            else if (strcmp(arg2, "right") == 0)
-            {
-                sim->ref_state = dvr_right;
-                sim->branch_state = BRANCH_RIGHT;
-            }
-            else
-                error->all("Unrecognized EACP reference state");
         }
 
         else if (strcmp(arg1, "asymmetry") == 0)
