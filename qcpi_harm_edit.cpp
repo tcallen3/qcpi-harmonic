@@ -69,7 +69,6 @@ double dt;                              // quantum timestep
 int qm_steps; // = 150;                     // number of quantum steps to use
 int kmax;                                // memory length
 
-int block_num;                        // number of blocks for MC variance
 int step_pts; // = 100;                // number of action integration points per QM timestep
 int chunks; // = 5;
 int chunksize; // = step_pts/chunks;        // must be integer divisor of step_pts
@@ -80,7 +79,6 @@ double bath_temp; // = 247;                 // Az-B temperature in K
 double beta; // = 1.0/(kb*bath_temp);       // reciprocal temperature in a.u.
 // RNG flag for repeatability
 unsigned long seed; // = 179524;
-unsigned long block_seed_spacing;
 
 // EDIT NOTE: (Move data structs to header and clean up)
 
@@ -139,7 +137,6 @@ struct SimInfo
     int step_pts;
     int chunks;
     int rho_steps;
-    int block_num;
     double bath_temp;
     char infile[FLEN];
     char outfile[FLEN];
@@ -151,7 +148,6 @@ struct FlagInfo
     // debugging flags and RNG seed
 
     unsigned long seed;
-    unsigned long block_seed_spacing;
 };
 
 // EDIT NOTES: (clean up function list and move to header)
@@ -251,13 +247,11 @@ int main(int argc, char * argv[])
     chunks = simData.chunks;
     chunksize = step_pts/chunks;
     rho_steps = simData.rho_steps;
-    block_num = simData.block_num;
 
     bath_temp = simData.bath_temp;
     beta = 1.0/(kb*bath_temp);
 
     seed = flagData.seed;
-    block_seed_spacing = flagData.block_seed_spacing;
 
     // set some index data manually
 
@@ -284,9 +278,6 @@ int main(int argc, char * argv[])
     if (ic_tot < nprocs)
         error->all("Too few ICs for processor number");
 
-    if ((nprocs % block_num) != 0)
-        error->all("Block number must evenly divide processor number");
-
     // make sure MC run is long enough
 
     if (steps < mc_buff * nmodes)
@@ -296,7 +287,6 @@ int main(int argc, char * argv[])
 
     FILE * infile;
     FILE * outfile;
-    FILE * trajfile;
 
     infile = fopen(simData.infile, "r");
 
@@ -380,30 +370,10 @@ int main(int argc, char * argv[])
     double * x_step = new double [nmodes];
     double * p_step = new double [nmodes];
 
-    // EDIT NOTES: (get rid of blocking for clarity)
-    // split global comm into blocked groups
-
-    MPI_Comm block_comm;
-    int block_id = me % block_num;
-
-    MPI_Comm_split(w_comm, block_id, me, &block_comm);
-
-    int block_size;
-    int me_block;
-
-    MPI_Comm_rank(block_comm, &me_block);
-    MPI_Comm_size(block_comm, &block_size);
-
-    // split procs based on rank in blocks
-
-    MPI_Comm var_comm;
-
-    MPI_Comm_split(w_comm, me_block, me, &var_comm);
-
     // initialize RNG; can change seed to change trajectory behavior
 
     gsl_rng * gen = gsl_rng_alloc(gsl_rng_mt19937);
-    unsigned long s_val = seed * (me+1) + (block_id * block_seed_spacing); 
+    unsigned long s_val = seed * (me+1);
    
     // ensure rng seed is not zero
  
@@ -980,75 +950,6 @@ int main(int argc, char * argv[])
         }
     }
 
-    // calculate block averages and variance
-
-    double * rho_real_block = new double [qm_steps*DSTATES*DSTATES];
-
-    double * rho_var = new double [qm_steps];
-
-    double * rho_var_block = new double [qm_steps];
-
-    // initialize to zero
-    
-    for (int i = 0; i < qm_steps; i++)
-    {
-        rho_var[i] = 0.0;
-
-        rho_var_block[i] = 0.0;
-
-        for (int j = 0; j < DSTATES*DSTATES; j++)
-        {
-            rho_real_block[i*DSTATES*DSTATES+j] = 0.0;
-        }
-    }
-
-    // only calculate variance if we have multiple blocks
-
-    if (block_num > 1)
-    {
-        // Allreduce rho real values across block
-
-        MPI_Allreduce(rho_real_proc, rho_real_block, qm_steps*DSTATES*DSTATES,
-            MPI_DOUBLE, MPI_SUM, block_comm);
-
-        // get total IC number in block
-
-        int block_ics = 0;
-
-        MPI_Allreduce(&my_ics, &block_ics, 1, MPI_INT, MPI_SUM, block_comm);
-
-        // normalize and calculate variance
-
-        for (int i = 0; i < qm_steps; i++)
-        {
-            for (int j = 0; j < DSTATES*DSTATES; j++)
-            {
-                rho_real_block[i*DSTATES*DSTATES+j] /= block_ics;
-            }
-
-            int entry = i*DSTATES*DSTATES;
-
-            rho_var_block[i] = rho_real[entry] - rho_real_block[entry];
-            rho_var_block[i] *= rho_var_block[i];
-
-       }
-
-        // reduce variances across parallel procs in blocks
-
-        MPI_Allreduce(rho_var_block, rho_var, qm_steps, MPI_DOUBLE,
-            MPI_SUM, var_comm);
-
-        for (int i = 0; i < qm_steps; i++)
-        {
-            double temp;
-
-            rho_var[i] /= (block_num - 1);
-            temp = rho_var[i];
-            rho_var[i] = sqrt(temp);
-       }    
-
-    } // end variance calc clause
-
     // output summary
 
       if (me == 0)
@@ -1131,7 +1032,7 @@ int main(int argc, char * argv[])
                 int entry = i*DSTATES*DSTATES;
 
                 fprintf(outfile, "%7.4f %8.5f %6.3f (Tr = %13.10f)\n", (i+1)*dt, 
-                    rho_real[entry], rho_var[i], rho_real[entry]+rho_real[entry+3]);
+                    rho_real[entry], 0.0, rho_real[entry]+rho_real[entry+3]);
             }
 
 
@@ -1171,10 +1072,6 @@ int main(int argc, char * argv[])
     delete [] rho_real;
     delete [] rho_imag;
 
-    delete [] rho_real_block;
-    delete [] rho_var;
-    delete [] rho_var_block;
-
     delete error;
 
     MPI_Finalize();
@@ -1211,13 +1108,11 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
     sim->step_pts = 100;            // number of action integration points
     sim->chunks = 5;                // must evenly divide step_pts
     sim->rho_steps = 100;            // points used to integrate U(t)
-    sim->block_num = 1;                // number of blocks in final average
 
     // note that original definitions use integer
     // flags, which is why these are ints and not bool
 
     flag->seed = 179524;            // GSL RNG seed
-    flag->block_seed_spacing = 4782; // change in seed value per block
 
     // initialize flags to check validity of
     // configuration file input
@@ -1306,16 +1201,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
             outflg = true;
         }
 
-        else if (strcmp(arg1, "block_num") == 0)
-        {
-            // set number of blocks in MC average
-
-            sim->block_num = atoi(arg2);
-
-            if (sim->block_num <= 0)
-                sim->block_num = 1;
-        }
-
         else if (strcmp(arg1, "asymmetry") == 0)
         {
             // set system asymmetry
@@ -1363,16 +1248,6 @@ void startup(char * config, struct SimInfo * sim, struct FlagInfo * flag,
                 flag->seed = 179524;
         }
 
-        else if (strcmp(arg1, "rng_spacing") == 0)
-        {
-            // set RNG spacing (this can be zero)
-
-            float f_seed = atof(arg2);
-
-            flag->block_seed_spacing = 
-                static_cast<unsigned long>(f_seed);
-        }
-        
         else    // skip unrecognized commands and weird lines
             continue;
     }

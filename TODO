@@ -6,7 +6,7 @@
 
 2.5) Test code to make sure it compiles and passes reg test (DONE)
 
-2.75) Remove fake EACP functionality and fixed ref option
+2.75) Remove fake EACP functionality and fixed ref option (DONE)
 
 3.) Eliminate blocking and block avg/var
 
