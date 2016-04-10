@@ -1,0 +1,28 @@
+all: qcpi_harmonic
+
+# compiler
+CC = mpic++
+
+# flags
+CFLAGS = -Wall -O3
+
+# include directory
+#IPATH = /mnt/people/tcallen3/local/include
+
+# library directory
+#LPATH = /mnt/people/tcallen3/local/lib
+
+# lib flags
+LFLAGS = -lgsl -lgslcblas -lm
+
+clean:
+	rm *.o
+
+qcpi_harmonic: qcpi_harmonic.o error.o
+	$(CC) -o qcpi_harmonic qcpi_harmonic.o error.o -I$(IPATH) -L$(LPATH) $(LFLAGS)
+
+qcpi_harmonic.o: qcpi_harmonic.cpp error.h
+	$(CC) $(CFLAGS) -I$(IPATH) -L$(LPATH) -c qcpi_harmonic.cpp
+
+error.o: error.cpp error.h
+	$(CC) $(CFLAGS) -c error.cpp
