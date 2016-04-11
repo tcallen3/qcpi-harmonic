@@ -56,14 +56,6 @@ const long mc_buff = 10000;             // avg. steps per bath mode in MC
 const double dvr_left = 1.0;
 const double dvr_right = -1.0;
 
-// EDIT NOTE: (eliminate dupe with data structs)
-// variables set in config file 
-
-double bath_temp; // = 247;                 // Az-B temperature in K
-double beta; // = 1.0/(kb*bath_temp);       // reciprocal temperature in a.u.
-// RNG flag for repeatability
-unsigned long seed; // = 179524;
-
 // EDIT NOTE: (Move data structs to header and clean up)
 
 // branching state enums
@@ -123,22 +115,16 @@ struct SimInfo
     int chunks;
     int rho_steps;
     double bath_temp;
+    double beta; 
     char infile[FLEN];
     char outfile[FLEN];
-};
-
-struct FlagInfo
-{
-    // debugging flags and RNG seed
-
     unsigned long seed;
 };
 
 // EDIT NOTES: (clean up function list and move to header)
 
 // startup and helper functions
-void startup(std::string, struct SimInfo *, struct FlagInfo *, 
-        MPI_Comm);
+void startup(std::string, struct SimInfo *, MPI_Comm);
 char * nextword(char *, char **);
 void print_header(const char *, const char *, int, FILE *);
 
@@ -153,7 +139,7 @@ double bath_setup(double *, double *, double *, long, int);
 void calibrate_mc(double *, double *, double *, double *, gsl_rng *, SimInfo &);
 double ic_gen(double *, double *, double *, double *, double *, double *, 
         gsl_rng *, SimInfo &);
-double dist(double, double, double, double, double, double);
+double dist(double, double, double, double, double, double, double);
 
 // EDIT NOTE: (Need to remove NR ODE functions and reimplement)
 // propagator integration
@@ -207,20 +193,16 @@ int main(int argc, char * argv[])
     // create structs to hold configuration parameters
 
     struct SimInfo simData;
-    struct FlagInfo flagData;
 
     // assign values to config. vars
 
-    startup(config_file.c_str(), &simData, &flagData, w_comm);
+    startup(config_file.c_str(), &simData, w_comm);
 
     // set global parameters from startup() output
 
     simData.asym *= kcal_to_hartree;
 
-    bath_temp = simData.bath_temp;
-    beta = 1.0/(kb*bath_temp);
-
-    seed = flagData.seed;
+    simData.beta = 1.0/(kb*simData.bath_temp);
 
     // EDIT NOTE: (these should be moved to startup function)
     // sanity checks
@@ -330,12 +312,12 @@ int main(int argc, char * argv[])
     // initialize RNG; can change seed to change trajectory behavior
 
     gsl_rng * gen = gsl_rng_alloc(gsl_rng_mt19937);
-    unsigned long s_val = seed * (me+1);
+    unsigned long s_val = simData.seed * (me+1);
    
     // ensure rng seed is not zero
  
     if (s_val == 0)
-        s_val = seed + (me+1);
+        s_val = simData.seed + (me+1);
 
     gsl_rng_set(gen, s_val);
 
@@ -928,7 +910,7 @@ int main(int argc, char * argv[])
         fprintf(outfile, "Memory length (kmax): %d\n", simData.kmax);
         fprintf(outfile, "Step length (a.u): %.5f\n", simData.dt);
         fprintf(outfile, "IC num: %d\n", simData.ic_tot);
-        fprintf(outfile, "RNG seed: %lu\n", seed);
+        fprintf(outfile, "RNG seed: %lu\n", simData.seed);
         fprintf(outfile, "MC skip: %ld\n", simData.mc_steps);
 
         fprintf(outfile, "Analytic trajectory integration: on\n");
@@ -954,8 +936,8 @@ int main(int argc, char * argv[])
         fprintf(outfile, "\n\n");
 
         fprintf(outfile, "Bath modes: %d\n", simData.bath_modes);
-        fprintf(outfile, "Bath temperature: %.2f\n", bath_temp);
-        fprintf(outfile, "Inverse temperature: %.4f\n", beta);
+        fprintf(outfile, "Bath temperature: %.2f\n", simData.bath_temp);
+        fprintf(outfile, "Inverse temperature: %.4f\n", simData.beta);
         fprintf(outfile, "Bath mode mass parameter: %.3f\n", mass);
         fprintf(outfile, "Using shifted W(x,p) (minimum at x=lambda)\n\n");
 
@@ -1040,8 +1022,7 @@ int main(int argc, char * argv[])
 // EDIT NOTES: (get rid of LAMMPS-based tokenizing)
 // startup() -- read in and process configuration file 
 
-void startup(std::string config, struct SimInfo * sim, struct FlagInfo * flag, 
-        MPI_Comm comm)
+void startup(std::string config, struct SimInfo * sim, MPI_Comm comm)
 {
     int me;
 
@@ -1067,7 +1048,7 @@ void startup(std::string config, struct SimInfo * sim, struct FlagInfo * flag,
     // note that original definitions use integer
     // flags, which is why these are ints and not bool
 
-    flag->seed = 179524;            // GSL RNG seed
+    sim->seed = 179524;            // GSL RNG seed
 
     // initialize flags to check validity of
     // configuration file input
@@ -1197,10 +1178,10 @@ void startup(std::string config, struct SimInfo * sim, struct FlagInfo * flag,
 
             float f_seed = atof(arg2);
 
-            flag->seed = static_cast<unsigned long>(f_seed);
+            sim->seed = static_cast<unsigned long>(f_seed);
 
-            if (flag->seed == 0)
-                flag->seed = 179524;
+            if (sim->seed == 0)
+                sim->seed = 179524;
         }
 
         else    // skip unrecognized commands and weird lines
@@ -1525,7 +1506,7 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
                 // this makes sure p isn't affected
 
                 double prob = dist(x_old, x_new, p_old, p_old, bath_freq[i], 
-                    bath_coup[i]);
+                    bath_coup[i], simData.beta);
 
                 if (prob >= 1.0) // accept
                 {
@@ -1615,7 +1596,7 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
                 // this makes sure x isn't affected
 
                 double prob = dist(x_old, x_old, p_old, p_new, bath_freq[i], 
-                    bath_coup[i]);
+                    bath_coup[i], simData.beta);
 
                 if (prob >= 1.0) // accept
                 {
@@ -1712,7 +1693,7 @@ double ic_gen(double * xvals, double * pvals, double * bath_freq, double * bath_
         // for the currently active mode specified by index
 
         double prob = dist(x_old, x_new, p_old, p_new, bath_freq[index], 
-            bath_coup[index]);
+            bath_coup[index], simData.beta);
 
         if (prob >= 1.0) // accept
         {
@@ -1750,7 +1731,7 @@ double ic_gen(double * xvals, double * pvals, double * bath_freq, double * bath_
 /* ------------------------------------------------------------------------ */
 
 double dist(double x_old, double x_new, double p_old, double p_new, 
-    double omega, double coup)
+    double omega, double coup, double beta)
 {
     // need atomic units     
     double f = hbar*omega*beta;
