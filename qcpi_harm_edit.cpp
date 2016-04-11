@@ -59,14 +59,6 @@ const double dvr_right = -1.0;
 // EDIT NOTE: (eliminate dupe with data structs)
 // variables set in config file 
 
-int kmax;                                // memory length
-
-int step_pts; // = 100;                // number of action integration points per QM timestep
-int chunks; // = 5;
-int chunksize; // = step_pts/chunks;        // must be integer divisor of step_pts
-double rho_dt;
-int rho_steps; // = 100;                // number of ODE integration points
-
 double bath_temp; // = 247;                 // Az-B temperature in K
 double beta; // = 1.0/(kb*bath_temp);       // reciprocal temperature in a.u.
 // RNG flag for repeatability
@@ -124,6 +116,7 @@ struct SimInfo
     long mc_steps;
     int ic_tot;
     double dt;
+    double rho_dt;
     int qm_steps;
     int kmax;
     int step_pts;
@@ -224,13 +217,6 @@ int main(int argc, char * argv[])
 
     simData.asym *= kcal_to_hartree;
 
-    kmax = simData.kmax;
-
-    step_pts = simData.step_pts;
-    chunks = simData.chunks;
-    chunksize = step_pts/chunks;
-    rho_steps = simData.rho_steps;
-
     bath_temp = simData.bath_temp;
     beta = 1.0/(kb*bath_temp);
 
@@ -239,13 +225,13 @@ int main(int argc, char * argv[])
     // EDIT NOTE: (these should be moved to startup function)
     // sanity checks
 
-    if (kmax <= 0)
+    if (simData.kmax <= 0)
         throw std::runtime_error("kmax must be positive\n");
 
     if (simData.dt <= 0)
         throw std::runtime_error("Quantum timestep must be positive\n");
 
-    if (simData.qm_steps < kmax)
+    if (simData.qm_steps < simData.kmax)
         throw std::runtime_error("Quantum step number smaller than kmax\n");
 
     if (simData.ic_tot < nprocs)
@@ -377,7 +363,7 @@ int main(int argc, char * argv[])
 
     // define ODE timestep
 
-    rho_dt = simData.dt/chunks;
+    simData.rho_dt = simData.dt/simData.chunks;
 
     // create propagator object
 
@@ -485,7 +471,7 @@ int main(int argc, char * argv[])
 
         // loop over first kmax time points
 
-        for (int seg = 0; seg < kmax; seg++)
+        for (int seg = 0; seg < simData.kmax; seg++)
         {
             // EDIT NOTES: (this block seems good candidate for function)
             // grow path list vector with child paths
@@ -539,7 +525,7 @@ int main(int argc, char * argv[])
                 // chunk trajectory into pieces for greater
                 // accuracy in integrating U(t)
 
-            for (int chunk_num = 0; chunk_num < chunks; chunk_num++)
+            for (int chunk_num = 0; chunk_num < simData.chunks; chunk_num++)
             {
                 // construct H(x,p) from bath configuration
             
@@ -549,7 +535,7 @@ int main(int argc, char * argv[])
                 // Hamiltonian approx.
 
                 rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                    0.0, rho_dt, rho_steps, prop_eqns, curr_prop.ham);
+                    0.0, simData.rho_dt, simData.rho_steps, prop_eqns, curr_prop.ham);
 
                 // swap out true and temp pointers
 
@@ -656,7 +642,7 @@ int main(int argc, char * argv[])
         // loop over time points beyond kmax
         // and propagate system iteratively
 
-        for (int seg = kmax; seg < simData.qm_steps; seg++)
+        for (int seg = simData.kmax; seg < simData.qm_steps; seg++)
         {
             // choose branch to propagate on stochastically,
             // based on state of system at start of memory span
@@ -686,7 +672,7 @@ int main(int argc, char * argv[])
 
                 // choose branching kmax steps back
 
-                if (old_ref_list[seg-kmax] == REF_LEFT)
+                if (old_ref_list[seg-simData.kmax] == REF_LEFT)
                     fRand = bRand = 0;
                 else
                     fRand = bRand = 1;
@@ -712,7 +698,7 @@ int main(int argc, char * argv[])
             // chunk trajectory into pieces for greater
             // accuracy in integrating U(t)
 
-            for (int chunk_num = 0; chunk_num < chunks; chunk_num++)
+            for (int chunk_num = 0; chunk_num < simData.chunks; chunk_num++)
             {
                 // construct H(x,p) from bath configuration
             
@@ -722,7 +708,7 @@ int main(int argc, char * argv[])
                 // Hamiltonian approx.
 
                 rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                    0.0, rho_dt, rho_steps, prop_eqns, curr_prop.ham);
+                    0.0, simData.rho_dt, simData.rho_steps, prop_eqns, curr_prop.ham);
 
                 // swap out true and temp pointers
 
@@ -939,7 +925,7 @@ int main(int argc, char * argv[])
         fprintf(outfile, "\n\n");
 
         fprintf(outfile, "Quantum steps: %d\n", simData.qm_steps);
-        fprintf(outfile, "Memory length (kmax): %d\n", kmax);
+        fprintf(outfile, "Memory length (kmax): %d\n", simData.kmax);
         fprintf(outfile, "Step length (a.u): %.5f\n", simData.dt);
         fprintf(outfile, "IC num: %d\n", simData.ic_tot);
         fprintf(outfile, "RNG seed: %lu\n", seed);
@@ -1796,7 +1782,7 @@ void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state,
         SimInfo & simData)
 {
     double del_t = simData.dt/2.0;
-    double chunk_dt = simData.dt/chunks;
+    double chunk_dt = simData.dt/simData.chunks;
 
     for (int mode = 0; mode < simData.bath_modes; mode++)
     {
@@ -1819,7 +1805,7 @@ void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state,
         x0 = prop.x0_free[mode];
         p0 = prop.p0_free[mode];
         
-        for (int i = 0; i < chunks; i++)
+        for (int i = 0; i < simData.chunks; i++)
         {
             // find x(t) at chunk time points
 
