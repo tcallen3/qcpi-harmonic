@@ -33,6 +33,8 @@
 #include <mpi.h>
 #include <stdexcept>
 #include <gsl/gsl_rng.h>
+#include <boost/tokenizer.hpp>
+#include <boost/lexical_cast.hpp>
 
 using namespace std;
 
@@ -49,7 +51,6 @@ const double hbar = 1.0;                // using atomic units
 const double range = 10.0;              // IC range for MC run
 const int DSTATES = 2;                  // number of DVR basis states
 complex<double> I(0.0,1.0);                // imaginary unit
-const long mc_buff = 10000;             // avg. steps per bath mode in MC
 
 // EDIT NOTE: (need to generalize)
 // DVR eigenvals (fixed for now) 
@@ -116,16 +117,15 @@ struct SimInfo
     int rho_steps;
     double bath_temp;
     double beta; 
-    char infile[FLEN];
-    char outfile[FLEN];
+    std::string input_name;
+    std::string output_name;
     unsigned long seed;
 };
 
 // EDIT NOTES: (clean up function list and move to header)
 
 // startup and helper functions
-void startup(std::string, struct SimInfo *, MPI_Comm);
-char * nextword(char *, char **);
+void startup(std::string, struct SimInfo *);
 void print_header(const char *, const char *, int, FILE *);
 
 // funcs to read file
@@ -186,9 +186,8 @@ int main(int argc, char * argv[])
         std::string exe_name = argv[0];
         throw std::runtime_error("Usage: " + exe_name + " <config_file>\n");
     }
-    std::string config_file;   
 
-    config_file = argv[1];
+    std::string config_file = argv[1];   
 
     // create structs to hold configuration parameters
 
@@ -196,59 +195,34 @@ int main(int argc, char * argv[])
 
     // assign values to config. vars
 
-    startup(config_file.c_str(), &simData, w_comm);
-
-    // set global parameters from startup() output
-
-    simData.asym *= kcal_to_hartree;
-
-    simData.beta = 1.0/(kb*simData.bath_temp);
-
-    // EDIT NOTE: (these should be moved to startup function)
-    // sanity checks
-
-    if (simData.kmax <= 0)
-        throw std::runtime_error("kmax must be positive\n");
-
-    if (simData.dt <= 0)
-        throw std::runtime_error("Quantum timestep must be positive\n");
-
-    if (simData.qm_steps < simData.kmax)
-        throw std::runtime_error("Quantum step number smaller than kmax\n");
+    startup(config_file.c_str(), &simData);
 
     if (simData.ic_tot < nprocs)
         throw std::runtime_error("Too few ICs for processor number\n");
-
-    // make sure MC run is long enough
-
-    if (simData.mc_steps < mc_buff * simData.bath_modes)
-        simData.mc_steps = mc_buff * simData.bath_modes;
 
     // open files for I/O
 
     FILE * infile;
     FILE * outfile;
 
-    infile = fopen(simData.infile, "r");
+    infile = fopen(simData.input_name.c_str(), "r");
 
     if (infile == NULL)
     {
-        std::string input_file = simData.infile;
         throw std::runtime_error("Could not open file " + 
-                input_file + "\n");
+                simData.input_name + "\n");
     }
 
     // only open output file on I/O proc
 
     if (me == 0)
     {
-        outfile = fopen(simData.outfile, "w");
+        outfile = fopen(simData.output_name.c_str(), "w");
 
         if (outfile == NULL)
         {
-            std::string output_file = simData.outfile;
             throw std::runtime_error("Could not open file " + 
-                    output_file + "\n");
+                    simData.output_name + "\n");
         }
     }
 
@@ -917,7 +891,7 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "Simulation used EACP reference hopping\n");
 
-        fprintf(outfile, "Input spectral density: %s\n", simData.infile);
+        fprintf(outfile, "Input spectral density: %s\n", simData.input_name);
         fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
 
         fprintf(outfile, "Total simulated time (a.u.): %.4f\n", simData.qm_steps*simData.dt);
@@ -1022,20 +996,25 @@ int main(int argc, char * argv[])
 // EDIT NOTES: (get rid of LAMMPS-based tokenizing)
 // startup() -- read in and process configuration file 
 
-void startup(std::string config, struct SimInfo * sim, MPI_Comm comm)
+void startup(std::string config, struct SimInfo * sim)
 {
-    int me;
+    typedef boost::tokenizer<boost::char_separator<char> > Tokenizer;
 
-    MPI_Comm_rank(comm, &me);
+    const char * delimiters = " \t\n";
+    boost::char_separator<char> sep(delimiters);
+    std::string emptyString = "";
+    Tokenizer tok(emptyString, sep);
+
+    const std::string comment_char = "#";
 
     ifstream conf_file;
-    char buffer[FLEN];
-    char * arg1;
-    char * arg2;
-    char * next;
-    char * ptr;
+    std::string buffer;
+    std::string arg1;
+    std::string arg2;
 
     // set defaults
+
+    const unsigned long mc_buff = 10000;
 
     sim->branch_state = BRANCH_LEFT; // defaults to left state branch
     sim->asym = 0.5;                // system asymmetry (in kcal/mol)
@@ -1072,113 +1051,125 @@ void startup(std::string config, struct SimInfo * sim, MPI_Comm comm)
     bool reqflg;
 
     conf_file.open(config.c_str(), ios_base::in);
+
     if (!conf_file.is_open())
         throw std::runtime_error("Could not open configuration file\n");
 
     // read in file line-by-line
 
-    while (conf_file.getline(buffer, FLEN))
+    Tokenizer::iterator iter;
+
+    while (getline(conf_file, buffer))
     {   
-        // tokenize
+        tok.assign(buffer);
 
-        arg1 = nextword(buffer, &next);
+        iter = tok.begin();
 
-        if (arg1 == NULL || next == NULL)   // skip blank lines
+        // skip empty lines and comments
+
+        if (tok.begin() == tok.end())
             continue;
 
-        ptr = next;
+        if ((*iter) == comment_char)
+            continue;
 
-        arg2 = nextword(ptr, &next);      
-           
+        // assign arguments
+
+        arg1 = *iter;
+        ++iter;
+
+        if (iter == tok.end())
+            throw std::runtime_error("Malformed command: " + arg1 + "\n");
+
+        arg2 = *iter;
+
         // execute logic on tokens (normalize case?)
 
-        if (strcmp(arg1, "rho_steps") == 0)
-            sim->rho_steps = atoi(arg2);
+        if (arg1 == "rho_steps")
+            sim->rho_steps = boost::lexical_cast<int>(arg2);
 
-        else if (strcmp(arg1, "qm_steps") == 0)
+        else if (arg1 == "qm_steps")
         {
-            sim->qm_steps = atoi(arg2);
+            sim->qm_steps = boost::lexical_cast<int>(arg2);
             qmstepsflg = true;
         }
 
-        else if (strcmp(arg1, "timestep") == 0)
+        else if (arg1 == "timestep")
         {
-            sim->dt = atof(arg2);
+            sim->dt = boost::lexical_cast<double>(arg2);
             qmdtflg = true;
         }
 
-        else if (strcmp(arg1, "ic_num") == 0 || strcmp(arg1, "tot_ics") == 0)
+        else if (arg1 == "ic_num")
         {
-            sim->ic_tot = atoi(arg2);
+            sim->ic_tot = boost::lexical_cast<int>(arg2);
             icnumflg = true;
         }
 
-        else if (strcmp(arg1, "kmax") == 0)
+        else if (arg1 == "kmax")
         {
-            sim->kmax = atoi(arg2);
+            sim->kmax = boost::lexical_cast<int>(arg2);
             kmaxflg = true;
         }
 
-        else if (strcmp(arg1, "temperature") == 0)
+        else if (arg1 == "temperature")
         {
-            sim->bath_temp = atof(arg2);
+            sim->bath_temp = boost::lexical_cast<double>(arg2);
             bathtempflg = true;
         }
 
-        else if (strcmp(arg1, "in_file") == 0 || strcmp(arg1, "input") == 0)
+        else if (arg1 == "input")
         {
-            sprintf(sim->infile, "%s", arg2);
+            sim->input_name = arg2;
             inflg = true;
         }
 
-        else if (strcmp(arg1, "out_file") == 0 || strcmp(arg1, "output") == 0)
+        else if (arg1 == "output")
         {
-            sprintf(sim->outfile, "%s", arg2);
+            sim->output_name = arg2;
             outflg = true;
         }
 
-        else if (strcmp(arg1, "asymmetry") == 0)
+        else if (arg1 == "asymmetry")
         {
             // set system asymmetry
 
-            sim->asym = atof(arg2);
+            sim->asym = boost::lexical_cast<double>(arg2);
         }
 
-        else if (strcmp(arg1, "bath_modes") == 0)
+        else if (arg1 == "bath_modes")
         {
             // set # of bath oscillators
 
-            sim->bath_modes = atoi(arg2);
+            sim->bath_modes = boost::lexical_cast<int>(arg2);
         }
 
-        else if (strcmp(arg1, "mc_steps") == 0)
+        else if (arg1 == "mc_steps")
         {
             // set MC burn size
 
-            sim->mc_steps = atol(arg2);
+            sim->mc_steps = boost::lexical_cast<long>(arg2);
         }
 
-        else if (strcmp(arg1, "step_pts") == 0)
+        else if (arg1 == "step_pts")
         {
             // set action integration points per step
 
-            sim->step_pts = atoi(arg2);
+            sim->step_pts = boost::lexical_cast<int>(arg2);
         }
 
-        else if (strcmp(arg1, "chunks") == 0)
+        else if (arg1 == "chunks")
         {
             // set # of action grouping chunks
 
-            sim->chunks = atoi(arg2);
+            sim->chunks = boost::lexical_cast<int>(arg2);
         }
 
-        else if (strcmp(arg1, "rng_seed") == 0)
+        else if (arg1 == "rng_seed")
         {
             // set RNG seed (ensure seed isn't 0)
 
-            float f_seed = atof(arg2);
-
-            sim->seed = static_cast<unsigned long>(f_seed);
+            sim->seed = boost::lexical_cast<unsigned long>(arg2);
 
             if (sim->seed == 0)
                 sim->seed = 179524;
@@ -1255,43 +1246,30 @@ void startup(std::string config, struct SimInfo * sim, MPI_Comm comm)
     if (sim->kmax > sim->qm_steps)
         throw std::runtime_error("Memory length cannot exceed total simulation time\n");
     
+    // set global parameters from startup() output
+
+    sim->asym *= kcal_to_hartree;
+
+    sim->beta = 1.0/(kb*sim->bath_temp);
+
+    // make sure MC run is long enough
+
+    if (sim->mc_steps < mc_buff * sim->bath_modes)
+        sim->mc_steps = mc_buff * sim->bath_modes;
+
+    // EDIT NOTE: (these should be moved to startup function)
+    // sanity checks
+
+    if (sim->kmax <= 0)
+        throw std::runtime_error("kmax must be positive\n");
+
+    if (sim->dt <= 0)
+        throw std::runtime_error("Quantum timestep must be positive\n");
+
+    if (sim->qm_steps < sim->kmax)
+        throw std::runtime_error("Quantum step number smaller than kmax\n");
+
     conf_file.close();
-}
-
-/* ----------------------------------------------------------------------
-   nextword() behavior:
-
-   find next word in str
-   insert 0 at end of word
-   ignore leading whitespace
-   treat text between single/double quotes as one arg
-   matching quote must be followed by whitespace char if not end of string
-   strip quotes from returned word
-   return ptr to start of word
-   return next = ptr after word or NULL if word ended with 0
-   return NULL if no word in string
-------------------------------------------------------------------------- */
-
-char * nextword(char *str, char **next)
-{
-  char *start,*stop;
-
-  start = &str[strspn(str," \t\n\v\f\r")];
-  if (*start == '\0') return NULL;
-  
-  if (*start == '"' || *start == '\'') {
-    stop = strchr(&start[1],*start);
-    if (!stop) throw std::runtime_error("Unbalanced quotes in input line\n");
-    if (stop[1] && !isspace(stop[1]))
-      throw std::runtime_error("Input line quote not followed by whitespace\n");
-    start++;
-  } else stop = &start[strcspn(start," \t\n\v\f\r")];
-  
-  if (*stop == '\0') *next = NULL;
-  else *next = stop+1;
-  *stop = '\0';
-
-  return start;
 }
 
 /*----------------------------------------------------------------------*/
