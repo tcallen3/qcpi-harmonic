@@ -891,7 +891,7 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "Simulation used EACP reference hopping\n");
 
-        fprintf(outfile, "Input spectral density: %s\n", simData.input_name);
+        fprintf(outfile, "Input spectral density: %s\n", simData.input_name.c_str());
         fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
 
         fprintf(outfile, "Total simulated time (a.u.): %.4f\n", simData.qm_steps*simData.dt);
@@ -1005,7 +1005,7 @@ void startup(std::string config, struct SimInfo * sim)
     std::string emptyString = "";
     Tokenizer tok(emptyString, sep);
 
-    const std::string comment_char = "#";
+    const char comment_char = '#';
 
     ifstream conf_file;
     std::string buffer;
@@ -1014,7 +1014,7 @@ void startup(std::string config, struct SimInfo * sim)
 
     // set defaults
 
-    const unsigned long mc_buff = 10000;
+    const long mc_buff = 10000;
 
     sim->branch_state = BRANCH_LEFT; // defaults to left state branch
     sim->asym = 0.5;                // system asymmetry (in kcal/mol)
@@ -1070,12 +1070,13 @@ void startup(std::string config, struct SimInfo * sim)
         if (tok.begin() == tok.end())
             continue;
 
-        if ((*iter) == comment_char)
+        arg1 = *iter;
+
+        if (arg1[0] == comment_char)
             continue;
 
         // assign arguments
 
-        arg1 = *iter;
         ++iter;
 
         if (iter == tok.end())
