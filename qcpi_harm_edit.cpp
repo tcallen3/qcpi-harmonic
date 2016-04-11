@@ -161,8 +161,6 @@ void mat_mul(complex<double> *, complex<double> *, complex<double> *, int);
 // mapping functions
 void map_paths(map<unsigned long long, unsigned> &, 
     vector<Path> &);
-void map_single(map<unsigned long long, unsigned> &, 
-    Path &, unsigned);
 unsigned long long get_binary(Path &);
 unsigned long long get_binary(vector<unsigned> &, vector<unsigned> &);
 
@@ -2191,18 +2189,6 @@ void map_paths(map<unsigned long long, unsigned> & pathMap,
 
         pathMap[bin_val] = path;
     }
-}
-
-/* ------------------------------------------------------------------------ */
-
-// map_single() uses numerical value of the binary string representing each
-// system path to generate a mapping of a single path to location in vector
-
-void map_single(map<unsigned long long, unsigned> & pathMap, 
-    Path & path, unsigned index)
-{
-    unsigned long long bin_val = get_binary(path);
-    pathMap[bin_val] = index;
 }
 
 /* ------------------------------------------------------------------------ */
