@@ -38,6 +38,8 @@
 
 using namespace std;
 
+typedef boost::tokenizer<boost::char_separator<char> > Tokenizer;
+
 // file buffer size
 const int FLEN = 1024;
 
@@ -48,7 +50,6 @@ const double kb = 3.1668114e-6;         // Boltzmann's constant for K to hartree
 const double tls_freq = 0.00016445;        // off-diagonal element of hamiltonian
 const double mass = 1.0;                // all masses taken normalized
 const double hbar = 1.0;                // using atomic units
-const double range = 10.0;              // IC range for MC run
 const int DSTATES = 2;                  // number of DVR basis states
 complex<double> I(0.0,1.0);                // imaginary unit
 
@@ -125,15 +126,16 @@ struct SimInfo
 // EDIT NOTES: (clean up function list and move to header)
 
 // startup and helper functions
-void startup(std::string, struct SimInfo *);
+void startup(std::string config, struct SimInfo * sim, Tokenizer & tok); // EDITED
 void print_header(const char *, const char *, int, FILE *);
 
 // funcs to read file
-long get_flines(FILE *);
-void get_spec(FILE *, double *, double *);
+void read_spec(std::string spec_name, std::vector<double> & omega, // EDITED
+        std::vector<double> & jvals, Tokenizer & tok);
 
 // func to calc w vals
-double bath_setup(double *, double *, double *, long, int);
+void bath_setup(double * bath_freq, double * bath_coup, std::string spec_name, // EDITED
+        int nmodes, Tokenizer & tok);
 
 // funcs to perform MC walk
 void calibrate_mc(double *, double *, double *, double *, gsl_rng *, SimInfo &);
@@ -191,9 +193,14 @@ int main(int argc, char * argv[])
 
     struct SimInfo simData;
 
+    const char * delimiters = " \t\n";
+    boost::char_separator<char> sep(delimiters);
+    std::string emptyString = "";
+    Tokenizer tok(emptyString, sep);
+
     // assign values to config. vars
 
-    startup(config_file.c_str(), &simData);
+    startup(config_file.c_str(), &simData, tok);
 
     if (simData.ic_tot < nprocs)
         throw std::runtime_error("Too few ICs for processor number\n");
@@ -228,52 +235,23 @@ int main(int argc, char * argv[])
 
     double start = MPI_Wtime();
 
-    // read in J(w)/w
-
-    long npoints = get_flines(infile);
-
-    double * omega = new double [npoints];
-    double * jvals = new double [npoints];
-
-    get_spec(infile, omega, jvals);
-
     // discretize bath modes
 
     double * bath_freq = new double [simData.bath_modes];
     double * bath_coup = new double [simData.bath_modes];
 
-    double w0 = bath_setup(omega, jvals, bath_freq, npoints, simData.bath_modes);
-
-    // calculate couplings from frequencies
-
-    double pi = acos(-1.0);
-
-    for (int i = 0; i < simData.bath_modes; i++)
-        bath_coup[i] = sqrt(2.0*w0/pi) * bath_freq[i];
-
-    // EDIT NOTES: (enforce even division in code)
+    bath_setup(bath_freq, bath_coup, simData.input_name, 
+            simData.bath_modes, tok);
 
     // divide up ICs across procs
-    // if IC num evenly divides, we just portion out
-    // a block; otherwise we give remainder out block-cyclically
-    // with blocksize 1
     
-    int base_share = simData.ic_tot/nprocs;
-    int remain = simData.ic_tot % nprocs;
-    int my_ics;
+    if ((simData.ic_tot % nprocs) != 0)
+        throw std::runtime_error("Initial conditions must evenly distribute over procs\n");
 
     if (simData.ic_tot < nprocs)
         throw std::runtime_error("Too few ICs for processor group\n");
 
-    if (remain == 0)
-        my_ics = base_share;
-    else
-    {
-        if (me < remain)
-            my_ics = base_share+1;
-        else
-            my_ics = base_share;
-    }
+    int my_ics = simData.ic_tot/nprocs;
 
     double * xvals = new double [simData.bath_modes];
     double * pvals = new double [simData.bath_modes];
@@ -292,6 +270,10 @@ int main(int argc, char * argv[])
         s_val = simData.seed + (me+1);
 
     gsl_rng_set(gen, s_val);
+
+    // EDIT NOTES: Consider moving x and p data, along with bath w and c
+    // values into an object or structure, for both conceptual coherence
+    // and cleaner code
 
     // run test MC trials to determine optimal step sizes
 
@@ -313,7 +295,6 @@ int main(int argc, char * argv[])
         else
             pvals[i] = -gsl_rng_uniform(gen) * p_step[i];
     }
-
 
     // define ODE timestep
 
@@ -954,8 +935,6 @@ int main(int argc, char * argv[])
 
     // cleanup
 
-    delete [] omega;
-    delete [] jvals;
     delete [] bath_freq;
     delete [] bath_coup;
 
@@ -994,15 +973,8 @@ int main(int argc, char * argv[])
 // EDIT NOTES: (get rid of LAMMPS-based tokenizing)
 // startup() -- read in and process configuration file 
 
-void startup(std::string config, struct SimInfo * sim)
+void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
 {
-    typedef boost::tokenizer<boost::char_separator<char> > Tokenizer;
-
-    const char * delimiters = " \t\n";
-    boost::char_separator<char> sep(delimiters);
-    std::string emptyString = "";
-    Tokenizer tok(emptyString, sep);
-
     const char comment_char = '#';
 
     ifstream conf_file;
@@ -1296,71 +1268,77 @@ void print_header(const char * msg, const char * separator,
 
 /* ------------------------------------------------------------------------ */
 
-long get_flines(FILE * fp)
+void read_spec(std::string spec_name, std::vector<double> & omega, 
+        std::vector<double> & jvals, Tokenizer & tok)
 {
-    long lines = 0;
-    char buf[FLEN];
+    ifstream spec_file;
+    std::string buffer;
+    std::string entry;
+    const char comment_char = '#';
 
-    while (fgets(buf, FLEN, fp) != NULL)
-    {
-        // ignore blank lines and comments
+    spec_file.open(spec_name.c_str(), std::ios_base::in);
 
-        if (buf[0] == '\0' || buf[0] == '#' || buf[0] == '\n')
-            continue;   
-        else
-            lines++;
-    }
+    if (!spec_file.is_open())
+        throw std::runtime_error("Could not open spectral density file\n");
 
-    // restore original file position
-    // could make this more general by
-    // using ftell() above in case we start
-    // mid-file
+    // read in file line-by-line
 
-    fseek(fp, 0L, SEEK_SET);
+    Tokenizer::iterator iter;
 
-    return lines;
-}
+    while (getline(spec_file, buffer))
+    {   
+        tok.assign(buffer);
 
-/* ------------------------------------------------------------------------ */
+        iter = tok.begin();
 
-void get_spec(FILE * fp, double * omega, double * jvals)
-{
-    char buf[FLEN];
-    long index = 0;
+        // skip empty lines and comments
 
-    // read in column pairs, skipping blank lines and comments
-
-    // assumes (w,J(w)) ordering for file
-
-    while (fgets(buf, FLEN, fp) != NULL)
-    {
-        // skip blank lines and comments
-
-        if (buf[0] == '\0' || buf[0] == '#' || buf[0] == '\n')
+        if (tok.begin() == tok.end())
             continue;
-        else
-        {
-            omega[index] = atof(strtok(buf, " \t\n"));
-            jvals[index] = atof(strtok(NULL, " \t\n"));
-    
-            index++;
-        }
-    }
+
+        entry = *iter;
+
+        if (entry[0] == comment_char)
+            continue;
+
+        omega.push_back(boost::lexical_cast<double>(entry));
+
+        // assign arguments
+
+        ++iter;
+
+        if (iter == tok.end())
+            throw std::runtime_error("Incomplete line in spectral density file\n");
+
+        entry = *iter;
+
+        jvals.push_back(boost::lexical_cast<double>(entry)); 
+
+    } // end specden reading
+
+    spec_file.close();
 }
 
 /* ------------------------------------------------------------------------ */
 
-double bath_setup(double * omega, double * jvals, double * bath_freq, long pts,
-    int nmodes)
+void bath_setup(double * bath_freq, double * bath_coup, std::string spec_name,
+        int nmodes, Tokenizer & tok)
 {
+    // read in spectral density from file
+
+    std::vector<double> omega;
+    std::vector<double> jvals;
+
+    read_spec(spec_name, omega, jvals, tok);
+
     // first calculate reorg energy via simple integration
 
     double dw = omega[1] - omega[0];    // assumes uniform spacing
     double sum = 0.0;
 
-    sum += (jvals[0] + jvals[pts-1])/2.0;
+    sum += (jvals.front() + jvals.back())/2.0;
 
-    for (long i = 1; i < pts-1; i++)
+    for (unsigned i = 1; i < jvals.size()-1; i++)
         sum += jvals[i];
 
     sum *= dw;
@@ -1392,7 +1370,7 @@ double bath_setup(double * omega, double * jvals, double * bath_freq, long pts,
         sum = 0.0;
         long i = -1;
     
-        while (sum <= (j+1) && i < pts-2)
+        while (sum <= (j+1) && i < static_cast<long>(jvals.size()-2))
         {
             i++;
             sum += jvals[i]*dw/w0;
@@ -1421,7 +1399,9 @@ double bath_setup(double * omega, double * jvals, double * bath_freq, long pts,
         }
     }
 
-    return w0;
+    for (int i = 0; i < nmodes; i++)
+        bath_coup[i] = sqrt(2.0*w0/pi) * bath_freq[i];
+
 }
 
 /*----------------------------------------------------------------------*/
@@ -1632,8 +1612,6 @@ void calibrate_mc(double * x_step, double * p_step, double * bath_freq,
 double ic_gen(double * xvals, double * pvals, double * bath_freq, double * bath_coup,
     double * x_step, double * p_step, gsl_rng * gen, SimInfo & simData)
 {   
-    //double step_max = range/100.0;
-
     double x_old, x_new;
     double p_old, p_new;
 
