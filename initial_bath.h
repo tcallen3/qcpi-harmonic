@@ -10,22 +10,27 @@
 class InitialBath
 {
     private:
-        vector<double> xStep;
-        vector<double> pStep;
+        double xOld, xNew;
+        double pOld, pNew;
+        double xPick, pPick;
+
+        std::vector<double> xStep;
+        std::vector<double> pStep;
 
         void read_spec(std::string specName, std::vector<double> & omega, 
             std::vector<double> & jvals, Tokenizer & tok);
-        void calibrate_mc(gsl_rng * gen, SimInfo & simData);
-        double dist(double xOld, double xNew, double pOld, double pNew, 
-            double omega, double coup, double beta);
+        int process_step(unsigned index, double beta, gsl_rng * gen);
+        double dist(unsigned index, double beta);
 
     public:
-        vector<double> bathFreq;
-        vector<double> bathCoup;
-        vector<double> xvals;
-        vector<double> pvals;
+        std::vector<double> bathFreq;
+        std::vector<double> bathCoup;
+        std::vector<double> xVals;
+        std::vector<double> pVals;
 
-        void bath_setup(std::string specName, int numModes, Tokenizer & tok);
+        void bath_setup(std::string specName, int numModes, Tokenizer & tok, 
+                int myRank);
+        void calibrate_mc(gsl_rng * gen, SimInfo & simData);
         void ic_gen(gsl_rng * gen, SimInfo & simData);
 };
 
