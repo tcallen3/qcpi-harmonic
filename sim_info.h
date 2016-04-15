@@ -18,6 +18,9 @@ class SimInfo
         bool inflg;
         bool outflg;
 
+        void parse_file(std::string config, Tokenizer & tok);
+        void sanity_check();
+
     public:
         double asym;
         int bathModes;
@@ -41,8 +44,6 @@ class SimInfo
 
         SimInfo();
         void startup(std::string config, Tokenizer & tok); 
-        void parse_file(std::string config, Tokenizer & tok);
-        void sanity_check();
 };
 
 #endif

@@ -18,12 +18,15 @@ LFLAGS = -lgsl -lgslcblas -lm
 clean:
 	rm *.o
 
-qcpi_harm_edit: qcpi_harm_edit.o initial_bath.o
-	$(CC) -o qcpi_harm_edit qcpi_harm_edit.o initial_bath.o $(LFLAGS)
+qcpi_harm_edit: qcpi_harm_edit.o initial_bath.o sim_info.o
+	$(CC) -o qcpi_harm_edit qcpi_harm_edit.o initial_bath.o sim_info.o $(LFLAGS)
 
 qcpi_harm_edit.o: qcpi_harm_edit.cpp 
 	$(CC) $(CFLAGS) -c qcpi_harm_edit.cpp
 
 initial_bath.o: initial_bath.cpp 
 	$(CC) $(CFLAGS) -c initial_bath.cpp
+
+sim_info.o: sim_info.cpp 
+	$(CC) $(CFLAGS) -c sim_info.cpp
 

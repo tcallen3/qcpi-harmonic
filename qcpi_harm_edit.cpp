@@ -28,11 +28,6 @@
 
 using namespace qcpiConstNS;
 
-// EDIT NOTES: (clean up function list and move to header)
-
-// startup and helper functions
-void startup(std::string config, struct SimInfo * sim, Tokenizer & tok); // EDITED
-
 // EDIT NOTE: (Need to remove NR ODE functions and reimplement)
 // propagator integration
 void ho_update_exact(Propagator &, Mode *, double, SimInfo &);
@@ -81,7 +76,7 @@ int main(int argc, char * argv[])
 
     // create structs to hold configuration parameters
 
-    struct SimInfo simData;
+    SimInfo simData;
 
     const char * delimiters = " \t\n";
     boost::char_separator<char> sep(delimiters);
@@ -90,7 +85,7 @@ int main(int argc, char * argv[])
 
     // assign values to config. vars
 
-    startup(config_file.c_str(), &simData, tok);
+    simData.startup(config_file, tok);
 
     if (simData.icTotal < nprocs)
         throw std::runtime_error("Too few ICs for processor number\n");
@@ -800,263 +795,6 @@ int main(int argc, char * argv[])
     MPI_Finalize();
 
     return 0;
-}
-
-/*----------------------------------------------------------------------*/
-
-// startup() -- read in and process configuration file 
-
-void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
-{
-    const char comment_char = '#';
-
-    ifstream conf_file;
-    std::string buffer;
-    std::string arg1;
-    std::string arg2;
-
-    // set defaults
-
-    const long mc_buff = 10000;
-
-    sim->asym = 0.5;                // system asymmetry (in kcal/mol)
-    sim->bathModes = 60;           // number of bath oscillators
-    sim->mcSteps = 50000;          // default MC burn
-    sim->chunks = 5;                
-    sim->rhoSteps = 100;            // points used to integrate U(t)
-
-    // note that original definitions use integer
-    // flags, which is why these are ints and not bool
-
-    sim->seed = 179524;            // GSL RNG seed
-
-    // initialize flags to check validity of
-    // configuration file input
-
-    bool qmstepsflg = false;
-    bool qmdtflg = false;
-    bool bathtempflg = false;
-
-    bool icnumflg = false;
-    bool kmaxflg = false;
-
-    bool inflg = false;
-    bool outflg = false;
-
-    // set category flags
-
-    bool timeflg;
-    bool simflg;
-    bool fileflg;
-
-    bool reqflg;
-
-    conf_file.open(config.c_str(), ios_base::in);
-
-    if (!conf_file.is_open())
-        throw std::runtime_error("Could not open configuration file\n");
-
-    // read in file line-by-line
-
-    Tokenizer::iterator iter;
-
-    while (getline(conf_file, buffer))
-    {   
-        tok.assign(buffer);
-
-        iter = tok.begin();
-
-        // skip empty lines and comments
-
-        if (tok.begin() == tok.end())
-            continue;
-
-        arg1 = *iter;
-
-        if (arg1[0] == comment_char)
-            continue;
-
-        // assign arguments
-
-        ++iter;
-
-        if (iter == tok.end())
-            throw std::runtime_error("Malformed command: " + arg1 + "\n");
-
-        arg2 = *iter;
-
-        // execute logic on tokens (normalize case?)
-
-        if (arg1 == "rho_steps")
-            sim->rhoSteps = boost::lexical_cast<int>(arg2);
-
-        else if (arg1 == "qm_steps")
-        {
-            sim->qmSteps = boost::lexical_cast<int>(arg2);
-            qmstepsflg = true;
-        }
-
-        else if (arg1 == "timestep")
-        {
-            sim->dt = boost::lexical_cast<double>(arg2);
-            qmdtflg = true;
-        }
-
-        else if (arg1 == "ic_num")
-        {
-            sim->icTotal = boost::lexical_cast<int>(arg2);
-            icnumflg = true;
-        }
-
-        else if (arg1 == "kmax")
-        {
-            sim->kmax = boost::lexical_cast<int>(arg2);
-            kmaxflg = true;
-        }
-
-        else if (arg1 == "temperature")
-        {
-            sim->bathTemp = boost::lexical_cast<double>(arg2);
-            bathtempflg = true;
-        }
-
-        else if (arg1 == "input")
-        {
-            sim->inputName = arg2;
-            inflg = true;
-        }
-
-        else if (arg1 == "output")
-        {
-            sim->outputName = arg2;
-            outflg = true;
-        }
-
-        else if (arg1 == "asymmetry")
-        {
-            // set system asymmetry
-
-            sim->asym = boost::lexical_cast<double>(arg2);
-        }
-
-        else if (arg1 == "bath_modes")
-        {
-            // set # of bath oscillators
-
-            sim->bathModes = boost::lexical_cast<int>(arg2);
-        }
-
-        else if (arg1 == "mc_steps")
-        {
-            // set MC burn size
-
-            sim->mcSteps = boost::lexical_cast<long>(arg2);
-        }
-
-        else if (arg1 == "chunks")
-        {
-            // set # of action grouping chunks
-
-            sim->chunks = boost::lexical_cast<int>(arg2);
-        }
-
-        else if (arg1 == "rng_seed")
-        {
-            // set RNG seed (ensure seed isn't 0)
-
-            sim->seed = boost::lexical_cast<unsigned long>(arg2);
-
-            if (sim->seed == 0)
-                sim->seed = 179524;
-        }
-
-        else    // skip unrecognized commands and weird lines
-            continue;
-    }
-
-    // check required flags
-
-    timeflg = qmstepsflg && qmdtflg;
-
-    simflg = icnumflg && kmaxflg && bathtempflg;
-
-    fileflg = inflg && outflg;
-
-    reqflg = timeflg && simflg && fileflg;
-
-    if (!reqflg)
-    {
-        if (!timeflg)
-            throw std::runtime_error("Must specify number of quantum steps and timestep values\n");
-
-        if (!simflg)
-            throw std::runtime_error("Must specify number of ICs, kmax, and bath temperature\n"); 
-
-        if (!fileflg)
-            throw std::runtime_error("Must specify spectral density input file, and data output file\n");
-    }
-
-    sim->rhoDelta = sim->dt/sim->chunks;
-
-    // check positive-definite quantities
-
-    if (sim->bathModes <= 0)
-        throw std::runtime_error("Bath oscillator number must be positive\n");
-
-    if (sim->icTotal <= 0)
-        throw std::runtime_error("Number of ICs must be positive\n");
-
-    if (sim->dt <= 0)
-        throw std::runtime_error("Timestep must be positive\n");
-
-    if (sim->qmSteps <= 0)
-        throw std::runtime_error("Total simulation steps must be positive\n");
-
-    if (sim->kmax <= 0)
-        throw std::runtime_error("Kmax segments must be positive\n");
-
-    if (sim->chunks <= 0)
-        throw std::runtime_error("Action chunk number must be positive\n");
-
-    if (sim->rhoSteps <= 0)
-        throw std::runtime_error("Number of ODE steps for rho(t) must be positive\n");
-
-    if (sim->bathTemp <= 0)
-        throw std::runtime_error("Bath temperature must be positive\n");
-
-    // check non-negative quantities
-
-    if (sim->mcSteps < 0)
-        throw std::runtime_error("Monte Carlo burn length can't be negative\n");
-
-    // ensure kmax < total steps
-
-    if (sim->kmax > sim->qmSteps)
-        throw std::runtime_error("Memory length cannot exceed total simulation time\n");
-    
-    // set global parameters from startup() output
-
-    sim->asym *= kcal_to_hartree;
-
-    sim->beta = 1.0/(kb*sim->bathTemp);
-
-    // make sure MC run is long enough
-
-    if (sim->mcSteps < mc_buff * sim->bathModes)
-        sim->mcSteps = mc_buff * sim->bathModes;
-
-    // sanity checks
-
-    if (sim->kmax <= 0)
-        throw std::runtime_error("kmax must be positive\n");
-
-    if (sim->dt <= 0)
-        throw std::runtime_error("Quantum timestep must be positive\n");
-
-    if (sim->qmSteps < sim->kmax)
-        throw std::runtime_error("Quantum step number smaller than kmax\n");
-
-    conf_file.close();
 }
 
 /* ------------------------------------------------------------------------ */
