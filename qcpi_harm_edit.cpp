@@ -28,10 +28,11 @@
 
 using namespace qcpiConstNS;
 
-// EDIT NOTE: (Need to remove NR ODE functions and reimplement)
 // propagator integration
 void ho_update_exact(Propagator &, Mode *, double, SimInfo &);
 void build_ham(Propagator &, Mode *, int, SimInfo &);
+
+// Need to remove NR ODE functions and reimplement
 void prop_eqns(double, complex<double> *, complex<double> *, void *);
 void rk4(complex<double> * y, complex<double> * dydx, int n, double x, double h, 
     complex<double> * yout, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params);
@@ -120,7 +121,7 @@ int main(int argc, char * argv[])
 
     int my_ics = simData.icTotal/nprocs;
 
-    // initialize RNG; can change seed to change trajectory behavior
+    // initialize RNG
 
     gsl_rng * gen = gsl_rng_alloc(gsl_rng_mt19937);
     unsigned long s_val = simData.seed * (me+1);
@@ -772,7 +773,6 @@ int main(int argc, char * argv[])
     // cleanup
 
 
-    //delete [] prop;
     delete [] curr_prop.prop;
     delete [] curr_prop.ptemp;
     delete [] curr_prop.ham;
