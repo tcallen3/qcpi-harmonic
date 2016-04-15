@@ -24,6 +24,7 @@
 
 #include "harmonic.h"
 #include "initial_bath.h"
+#include "sim_info.h"
 
 using namespace qcpiConstNS;
 
@@ -91,7 +92,7 @@ int main(int argc, char * argv[])
 
     startup(config_file.c_str(), &simData, tok);
 
-    if (simData.ic_tot < nprocs)
+    if (simData.icTotal < nprocs)
         throw std::runtime_error("Too few ICs for processor number\n");
 
     // open output file for I/O on single proc, opening early to 
@@ -101,12 +102,12 @@ int main(int argc, char * argv[])
 
     if (me == 0)
     {
-        outfile = fopen(simData.output_name.c_str(), "w");
+        outfile = fopen(simData.outputName.c_str(), "w");
 
         if (outfile == NULL)
         {
             throw std::runtime_error("Could not open file " + 
-                    simData.output_name + "\n");
+                    simData.outputName + "\n");
         }
     }
 
@@ -116,13 +117,13 @@ int main(int argc, char * argv[])
 
     // divide up ICs across procs
     
-    if ((simData.ic_tot % nprocs) != 0)
+    if ((simData.icTotal % nprocs) != 0)
         throw std::runtime_error("Initial conditions must evenly distribute over procs\n");
 
-    if (simData.ic_tot < nprocs)
+    if (simData.icTotal < nprocs)
         throw std::runtime_error("Too few ICs for processor group\n");
 
-    int my_ics = simData.ic_tot/nprocs;
+    int my_ics = simData.icTotal/nprocs;
 
     // initialize RNG; can change seed to change trajectory behavior
 
@@ -140,7 +141,7 @@ int main(int argc, char * argv[])
 
     InitialBath bath;
 
-    bath.bath_setup(simData.input_name, simData.bath_modes, tok, me);
+    bath.bath_setup(simData.inputName, simData.bathModes, tok, me);
 
     bath.calibrate_mc(gen, simData);
 
@@ -156,10 +157,10 @@ int main(int argc, char * argv[])
 
     // allocate density matrix
 
-    complex<double> ** rho_proc = new complex<double> * [simData.qm_steps];
-    complex<double> * rho_ic_proc = new complex<double> [simData.qm_steps];
+    complex<double> ** rho_proc = new complex<double> * [simData.qmSteps];
+    complex<double> * rho_ic_proc = new complex<double> [simData.qmSteps];
 
-    for (int i = 0; i < simData.qm_steps; i++)
+    for (int i = 0; i < simData.qmSteps; i++)
     {
         rho_proc[i] = new complex<double> [DSTATES*DSTATES];
 
@@ -180,16 +181,16 @@ int main(int argc, char * argv[])
 
     // set up variables to store current and past reference state
 
-    Ref * old_ref_list = new Ref [simData.qm_steps];
+    Ref * old_ref_list = new Ref [simData.qmSteps];
 
     old_ref_list[0] = REF_LEFT;
 
     // initialize harmonic bath arrays
 
-    Mode * modes = new Mode [simData.bath_modes];
-    Mode * ref_modes = new Mode [simData.bath_modes];
+    Mode * modes = new Mode [simData.bathModes];
+    Mode * ref_modes = new Mode [simData.bathModes];
 
-    for (int i = 0; i < simData.bath_modes; i++)
+    for (int i = 0; i < simData.bathModes; i++)
     {
         modes[i].omega = ref_modes[i].omega = bath.bathFreq[i];
         modes[i].c = ref_modes[i].c = bath.bathCoup[i];
@@ -213,7 +214,7 @@ int main(int argc, char * argv[])
     {
         // zero per-proc rho(t)
 
-        for (int i = 0; i < simData.qm_steps; i++)
+        for (int i = 0; i < simData.qmSteps; i++)
             rho_ic_proc[i] = 0.0;
 
         // generate ICs for HOs using MC walk (we use last step's
@@ -310,7 +311,7 @@ int main(int argc, char * argv[])
                 // Hamiltonian approx.
 
                 rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                    0.0, simData.rho_dt, simData.rho_steps, prop_eqns, curr_prop.ham);
+                    0.0, simData.rhoDelta, simData.rhoSteps, prop_eqns, curr_prop.ham);
 
                 // swap out true and temp pointers
 
@@ -417,7 +418,7 @@ int main(int argc, char * argv[])
         // loop over time points beyond kmax
         // and propagate system iteratively
 
-        for (int seg = simData.kmax; seg < simData.qm_steps; seg++)
+        for (int seg = simData.kmax; seg < simData.qmSteps; seg++)
         {
             // choose branch to propagate on stochastically,
             // based on state of system at start of memory span
@@ -483,7 +484,7 @@ int main(int argc, char * argv[])
                 // Hamiltonian approx.
 
                 rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                    0.0, simData.rho_dt, simData.rho_steps, prop_eqns, curr_prop.ham);
+                    0.0, simData.rhoDelta, simData.rhoSteps, prop_eqns, curr_prop.ham);
 
                 // swap out true and temp pointers
 
@@ -646,13 +647,13 @@ int main(int argc, char * argv[])
     // collect real and imag parts of rho into separate
     // arrays for MPI communication
 
-    double * rho_real_proc = new double [simData.qm_steps*DSTATES*DSTATES];
-    double * rho_imag_proc = new double [simData.qm_steps*DSTATES*DSTATES];
+    double * rho_real_proc = new double [simData.qmSteps*DSTATES*DSTATES];
+    double * rho_imag_proc = new double [simData.qmSteps*DSTATES*DSTATES];
 
-    double * rho_real = new double [simData.qm_steps*DSTATES*DSTATES];
-    double * rho_imag = new double [simData.qm_steps*DSTATES*DSTATES];
+    double * rho_real = new double [simData.qmSteps*DSTATES*DSTATES];
+    double * rho_imag = new double [simData.qmSteps*DSTATES*DSTATES];
 
-    for (int i = 0; i < simData.qm_steps; i++)
+    for (int i = 0; i < simData.qmSteps; i++)
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
@@ -666,20 +667,20 @@ int main(int argc, char * argv[])
 
     // Allreduce the real and imaginary arrays
 
-    MPI_Allreduce(rho_real_proc, rho_real, simData.qm_steps*DSTATES*DSTATES,
+    MPI_Allreduce(rho_real_proc, rho_real, simData.qmSteps*DSTATES*DSTATES,
         MPI_DOUBLE, MPI_SUM, w_comm);
 
-    MPI_Allreduce(rho_imag_proc, rho_imag, simData.qm_steps*DSTATES*DSTATES,
+    MPI_Allreduce(rho_imag_proc, rho_imag, simData.qmSteps*DSTATES*DSTATES,
         MPI_DOUBLE, MPI_SUM, w_comm);
 
     // scale arrays by Monte Carlo factor
 
-    for (int i = 0; i < simData.qm_steps; i++)
+    for (int i = 0; i < simData.qmSteps; i++)
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
-            rho_real[i*DSTATES*DSTATES+j] /= simData.ic_tot;
-            rho_imag[i*DSTATES*DSTATES+j] /= simData.ic_tot;
+            rho_real[i*DSTATES*DSTATES+j] /= simData.icTotal;
+            rho_imag[i*DSTATES*DSTATES+j] /= simData.icTotal;
         }
     }
 
@@ -699,21 +700,21 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "\n\n");
 
-        fprintf(outfile, "Quantum steps: %d\n", simData.qm_steps);
+        fprintf(outfile, "Quantum steps: %d\n", simData.qmSteps);
         fprintf(outfile, "Memory length (kmax): %d\n", simData.kmax);
         fprintf(outfile, "Step length (a.u): %.5f\n", simData.dt);
-        fprintf(outfile, "IC num: %d\n", simData.ic_tot);
+        fprintf(outfile, "IC num: %d\n", simData.icTotal);
         fprintf(outfile, "RNG seed: %lu\n", simData.seed);
-        fprintf(outfile, "MC skip: %ld\n", simData.mc_steps);
+        fprintf(outfile, "MC skip: %ld\n", simData.mcSteps);
 
         fprintf(outfile, "Analytic trajectory integration: on\n");
 
         fprintf(outfile, "Simulation used EACP reference hopping\n");
 
-        fprintf(outfile, "Input spectral density: %s\n", simData.input_name.c_str());
+        fprintf(outfile, "Input spectral density: %s\n", simData.inputName.c_str());
         fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
 
-        fprintf(outfile, "Total simulated time (a.u.): %.4f\n", simData.qm_steps*simData.dt);
+        fprintf(outfile, "Total simulated time (a.u.): %.4f\n", simData.qmSteps*simData.dt);
 
         fprintf(outfile, "Processors: %d\n\n", nprocs);
         fprintf(outfile, "Total simulation time: %.3f min\n\n", g_runtime/60.0);
@@ -728,8 +729,8 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "\n\n");
 
-        fprintf(outfile, "Bath modes: %d\n", simData.bath_modes);
-        fprintf(outfile, "Bath temperature: %.2f\n", simData.bath_temp);
+        fprintf(outfile, "Bath modes: %d\n", simData.bathModes);
+        fprintf(outfile, "Bath temperature: %.2f\n", simData.bathTemp);
         fprintf(outfile, "Inverse temperature: %.4f\n", simData.beta);
         fprintf(outfile, "Bath mode mass parameter: %.3f\n", mass);
         fprintf(outfile, "Using shifted W(x,p) (minimum at x=lambda)\n\n");
@@ -760,7 +761,7 @@ int main(int argc, char * argv[])
         fprintf(outfile, "\n\n");
 
        
-            for (int i = 0; i < simData.qm_steps; i++)
+            for (int i = 0; i < simData.qmSteps; i++)
             {
                 int entry = i*DSTATES*DSTATES;
 
@@ -781,7 +782,7 @@ int main(int argc, char * argv[])
     delete [] curr_prop.ptemp;
     delete [] curr_prop.ham;
 
-    for (int i = 0; i < simData.qm_steps; i++)
+    for (int i = 0; i < simData.qmSteps; i++)
     {
         delete [] rho_proc[i];
     }
@@ -803,7 +804,6 @@ int main(int argc, char * argv[])
 
 /*----------------------------------------------------------------------*/
 
-// EDIT NOTES: (get rid of LAMMPS-based tokenizing)
 // startup() -- read in and process configuration file 
 
 void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
@@ -819,13 +819,11 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
 
     const long mc_buff = 10000;
 
-    sim->branch_state = BRANCH_LEFT; // defaults to left state branch
     sim->asym = 0.5;                // system asymmetry (in kcal/mol)
-    sim->bath_modes = 60;           // number of bath oscillators
-    sim->mc_steps = 50000;          // default MC burn
-    sim->step_pts = 100;            // number of action integration points
-    sim->chunks = 5;                // must evenly divide step_pts
-    sim->rho_steps = 100;            // points used to integrate U(t)
+    sim->bathModes = 60;           // number of bath oscillators
+    sim->mcSteps = 50000;          // default MC burn
+    sim->chunks = 5;                
+    sim->rhoSteps = 100;            // points used to integrate U(t)
 
     // note that original definitions use integer
     // flags, which is why these are ints and not bool
@@ -890,11 +888,11 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
         // execute logic on tokens (normalize case?)
 
         if (arg1 == "rho_steps")
-            sim->rho_steps = boost::lexical_cast<int>(arg2);
+            sim->rhoSteps = boost::lexical_cast<int>(arg2);
 
         else if (arg1 == "qm_steps")
         {
-            sim->qm_steps = boost::lexical_cast<int>(arg2);
+            sim->qmSteps = boost::lexical_cast<int>(arg2);
             qmstepsflg = true;
         }
 
@@ -906,7 +904,7 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
 
         else if (arg1 == "ic_num")
         {
-            sim->ic_tot = boost::lexical_cast<int>(arg2);
+            sim->icTotal = boost::lexical_cast<int>(arg2);
             icnumflg = true;
         }
 
@@ -918,19 +916,19 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
 
         else if (arg1 == "temperature")
         {
-            sim->bath_temp = boost::lexical_cast<double>(arg2);
+            sim->bathTemp = boost::lexical_cast<double>(arg2);
             bathtempflg = true;
         }
 
         else if (arg1 == "input")
         {
-            sim->input_name = arg2;
+            sim->inputName = arg2;
             inflg = true;
         }
 
         else if (arg1 == "output")
         {
-            sim->output_name = arg2;
+            sim->outputName = arg2;
             outflg = true;
         }
 
@@ -945,21 +943,14 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
         {
             // set # of bath oscillators
 
-            sim->bath_modes = boost::lexical_cast<int>(arg2);
+            sim->bathModes = boost::lexical_cast<int>(arg2);
         }
 
         else if (arg1 == "mc_steps")
         {
             // set MC burn size
 
-            sim->mc_steps = boost::lexical_cast<long>(arg2);
-        }
-
-        else if (arg1 == "step_pts")
-        {
-            // set action integration points per step
-
-            sim->step_pts = boost::lexical_cast<int>(arg2);
+            sim->mcSteps = boost::lexical_cast<long>(arg2);
         }
 
         else if (arg1 == "chunks")
@@ -1005,65 +996,55 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
             throw std::runtime_error("Must specify spectral density input file, and data output file\n");
     }
 
-    // ensure consistency of step_pts and chunk values
-
-    int factor = sim->step_pts/sim->chunks;
-
-    sim->step_pts = factor * sim->chunks;
-
-    sim->rho_dt = sim->dt/sim->chunks;
+    sim->rhoDelta = sim->dt/sim->chunks;
 
     // check positive-definite quantities
 
-    if (sim->bath_modes <= 0)
+    if (sim->bathModes <= 0)
         throw std::runtime_error("Bath oscillator number must be positive\n");
 
-    if (sim->ic_tot <= 0)
+    if (sim->icTotal <= 0)
         throw std::runtime_error("Number of ICs must be positive\n");
 
     if (sim->dt <= 0)
         throw std::runtime_error("Timestep must be positive\n");
 
-    if (sim->qm_steps <= 0)
+    if (sim->qmSteps <= 0)
         throw std::runtime_error("Total simulation steps must be positive\n");
 
     if (sim->kmax <= 0)
         throw std::runtime_error("Kmax segments must be positive\n");
 
-    if (sim->step_pts <= 0)
-        throw std::runtime_error("Numer of action integration points must be positive\n");
-
     if (sim->chunks <= 0)
         throw std::runtime_error("Action chunk number must be positive\n");
 
-    if (sim->rho_steps <= 0)
+    if (sim->rhoSteps <= 0)
         throw std::runtime_error("Number of ODE steps for rho(t) must be positive\n");
 
-    if (sim->bath_temp <= 0)
+    if (sim->bathTemp <= 0)
         throw std::runtime_error("Bath temperature must be positive\n");
 
     // check non-negative quantities
 
-    if (sim->mc_steps < 0)
+    if (sim->mcSteps < 0)
         throw std::runtime_error("Monte Carlo burn length can't be negative\n");
 
     // ensure kmax < total steps
 
-    if (sim->kmax > sim->qm_steps)
+    if (sim->kmax > sim->qmSteps)
         throw std::runtime_error("Memory length cannot exceed total simulation time\n");
     
     // set global parameters from startup() output
 
     sim->asym *= kcal_to_hartree;
 
-    sim->beta = 1.0/(kb*sim->bath_temp);
+    sim->beta = 1.0/(kb*sim->bathTemp);
 
     // make sure MC run is long enough
 
-    if (sim->mc_steps < mc_buff * sim->bath_modes)
-        sim->mc_steps = mc_buff * sim->bath_modes;
+    if (sim->mcSteps < mc_buff * sim->bathModes)
+        sim->mcSteps = mc_buff * sim->bathModes;
 
-    // EDIT NOTE: (these should be moved to startup function)
     // sanity checks
 
     if (sim->kmax <= 0)
@@ -1072,7 +1053,7 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
     if (sim->dt <= 0)
         throw std::runtime_error("Quantum timestep must be positive\n");
 
-    if (sim->qm_steps < sim->kmax)
+    if (sim->qmSteps < sim->kmax)
         throw std::runtime_error("Quantum step number smaller than kmax\n");
 
     conf_file.close();
@@ -1086,7 +1067,7 @@ void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state,
     double del_t = simData.dt/2.0;
     double chunk_dt = simData.dt/simData.chunks;
 
-    for (int mode = 0; mode < simData.bath_modes; mode++)
+    for (int mode = 0; mode < simData.bathModes; mode++)
     {
         double x0, xt;
         double p0, pt;
@@ -1202,7 +1183,7 @@ void build_ham(Propagator & prop, Mode * modes, int chunk, SimInfo & simData)
     left_sum = 0.0;
     right_sum = 0.0;
 
-    for (int i = 0; i < simData.bath_modes; i++)
+    for (int i = 0; i < simData.bathModes; i++)
     {
         double csquare = modes[i].c*modes[i].c;
         double wsquare = modes[i].omega*modes[i].omega;
@@ -1241,7 +1222,7 @@ void qcpi_update_exact(Path & qm_path, Mode * mlist, SimInfo & simData)
     double del_t = simData.dt/2.0;
     double dvr_vals[DSTATES] = {dvr_left, dvr_right};
 
-    for (int mode = 0; mode < simData.bath_modes; mode++)
+    for (int mode = 0; mode < simData.bathModes; mode++)
     {
         // set up ICs for first half of path
 
@@ -1324,7 +1305,7 @@ double action_calc_exact(Path & qm_path, Mode * mlist, Mode * reflist,
 
     double action = 0.0;
 
-    for (int mode = 0; mode < simData.bath_modes; mode++)
+    for (int mode = 0; mode < simData.bathModes; mode++)
     {
         double sum = 0.0;
 
