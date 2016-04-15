@@ -19,6 +19,8 @@ using namespace std;
 
 typedef boost::tokenizer<boost::char_separator<char> > Tokenizer;
 
+namespace qcpiConstNS
+{
 // file buffer size
 const int FLEN = 1024;
 
@@ -30,13 +32,13 @@ const double tls_freq = 0.00016445;        // off-diagonal element of hamiltonia
 const double mass = 1.0;                // all masses taken normalized
 const double hbar = 1.0;                // using atomic units
 const int DSTATES = 2;                  // number of DVR basis states
-complex<double> I(0.0,1.0);                // imaginary unit
+const complex<double> I(0.0, 1.0);
 
 // EDIT NOTE: (need to generalize)
 // DVR eigenvals (fixed for now) 
 const double dvr_left = 1.0;
 const double dvr_right = -1.0;
-
+}
 // EDIT NOTE: (Move data structs to header and clean up)
 
 // branching state enums

@@ -22,126 +22,15 @@
 //         dvr_left = 0.0 and dvr_right = -2.0. Other desired 
 //          shifts can be extrapolated from this example.
 
-#include <fstream>
-#include <vector>
-#include <map>
-#include <stdio.h>
-#include <cstdlib>
-#include <complex>
-#include <cmath>
-#include <cstring>
-#include <mpi.h>
-#include <stdexcept>
-#include <gsl/gsl_rng.h>
-#include <boost/tokenizer.hpp>
-#include <boost/lexical_cast.hpp>
+#include "initial_bath.h"
 
-using namespace std;
-
-typedef boost::tokenizer<boost::char_separator<char> > Tokenizer;
-
-// file buffer size
-const int FLEN = 1024;
-
-// EDIT NOTE: (move to namespace and header)
-// semi-constants (working in a.u.) 
-const double kcal_to_hartree = 1.5936e-3; // For converting asymmetry to hartree
-const double kb = 3.1668114e-6;         // Boltzmann's constant for K to hartree
-const double tls_freq = 0.00016445;        // off-diagonal element of hamiltonian
-const double mass = 1.0;                // all masses taken normalized
-const double hbar = 1.0;                // using atomic units
-const int DSTATES = 2;                  // number of DVR basis states
-complex<double> I(0.0,1.0);                // imaginary unit
-
-// EDIT NOTE: (need to generalize)
-// DVR eigenvals (fixed for now) 
-const double dvr_left = 1.0;
-const double dvr_right = -1.0;
-
-// EDIT NOTE: (Move data structs to header and clean up)
-
-// branching state enums
-
-enum Branch {BRANCH_LEFT, BRANCH_MID, BRANCH_RIGHT};
-
-// reference state enums
-
-enum Ref {REF_LEFT, REF_RIGHT};
-
-// type definitions
-typedef pair<unsigned, unsigned long long> iter_pair;
-
-// structure definitions
-struct Path
-{
-    vector<unsigned> fwd_path;
-    vector<unsigned> bwd_path;
-    complex<double> product;
-    vector<double> x0;
-    vector<double> p0;
-};
-
-struct Propagator
-{
-    complex<double> * prop;
-    complex<double> * ham;
-    complex<double> * ptemp;
-    vector<double> x0_free;
-    vector<double> p0_free;
-};
-
-struct Mode
-{
-    vector<double> x_t;
-    
-    double c;
-    double omega;
-    double first_phase;
-    double second_phase;
-};
-
-struct SimInfo
-{
-    // basic simulation params
-
-    Branch branch_state;     // what state to use for iterative branching
-    double asym;
-    int bath_modes;
-    long mc_steps;
-    int ic_tot;
-    double dt;
-    double rho_dt;
-    int qm_steps;
-    int kmax;
-    int step_pts;
-    int chunks;
-    int rho_steps;
-    double bath_temp;
-    double beta; 
-    std::string input_name;
-    std::string output_name;
-    unsigned long seed;
-};
+using namespace qcpiConstNS;
 
 // EDIT NOTES: (clean up function list and move to header)
 
 // startup and helper functions
 void startup(std::string config, struct SimInfo * sim, Tokenizer & tok); // EDITED
 void print_header(const char *, const char *, int, FILE *);
-
-// funcs to read file
-void read_spec(std::string spec_name, std::vector<double> & omega, // EDITED
-        std::vector<double> & jvals, Tokenizer & tok);
-
-// func to calc w vals
-void bath_setup(double * bath_freq, double * bath_coup, std::string spec_name, // EDITED
-        int nmodes, Tokenizer & tok);
-
-// funcs to perform MC walk
-void calibrate_mc(double *, double *, double *, double *, gsl_rng *, SimInfo &);
-double ic_gen(double *, double *, double *, double *, double *, double *, 
-        gsl_rng *, SimInfo &);
-double dist(double, double, double, double, double, double, double);
 
 // EDIT NOTE: (Need to remove NR ODE functions and reimplement)
 // propagator integration
@@ -237,12 +126,6 @@ int main(int argc, char * argv[])
 
     // discretize bath modes
 
-    double * bath_freq = new double [simData.bath_modes];
-    double * bath_coup = new double [simData.bath_modes];
-
-    bath_setup(bath_freq, bath_coup, simData.input_name, 
-            simData.bath_modes, tok);
-
     // divide up ICs across procs
     
     if ((simData.ic_tot % nprocs) != 0)
@@ -252,12 +135,6 @@ int main(int argc, char * argv[])
         throw std::runtime_error("Too few ICs for processor group\n");
 
     int my_ics = simData.ic_tot/nprocs;
-
-    double * xvals = new double [simData.bath_modes];
-    double * pvals = new double [simData.bath_modes];
-
-    double * x_step = new double [simData.bath_modes];
-    double * p_step = new double [simData.bath_modes];
 
     // initialize RNG; can change seed to change trajectory behavior
 
@@ -277,24 +154,30 @@ int main(int argc, char * argv[])
 
     // run test MC trials to determine optimal step sizes
 
-    calibrate_mc(x_step, p_step, bath_freq, bath_coup, gen, simData);
+    InitialBath bath;
 
-    // initialize IC arrays
+    bath.bath_setup(simData.input_name, simData.bath_modes, tok, me);
 
-    for (int i = 0; i < simData.bath_modes; i++)
-    {
-        if (gsl_rng_uniform_int(gen, 2) == 0)
-            xvals[i] = bath_coup[i] * ( dvr_left/(mass*bath_freq[i]*bath_freq[i]) ) +
-                gsl_rng_uniform(gen) * x_step[i];
-        else
-            xvals[i] = bath_coup[i] * ( dvr_left/(mass*bath_freq[i]*bath_freq[i]) ) -
-                gsl_rng_uniform(gen) * x_step[i];
+    // !! BEGIN DEBUG !!
+    
+    if (me == 0)
+        fprintf(stdout, "Made it past bath_setup\n");
 
-        if (gsl_rng_uniform_int(gen, 2) == 0)
-            pvals[i] = gsl_rng_uniform(gen) * p_step[i];
-        else
-            pvals[i] = -gsl_rng_uniform(gen) * p_step[i];
-    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    
+    // !! END DEBUG !!
+
+
+    bath.calibrate_mc(gen, simData);
+
+    // !! BEGIN DEBUG !!
+    
+    if (me == 0)
+        fprintf(stdout, "Made it past calibrate_mc\n");
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    
+    // !! END DEBUG !!
 
     // define ODE timestep
 
@@ -347,11 +230,8 @@ int main(int argc, char * argv[])
 
     for (int i = 0; i < simData.bath_modes; i++)
     {
-        modes[i].omega = bath_freq[i];
-        modes[i].c = bath_coup[i];
-
-        ref_modes[i].omega = bath_freq[i];
-        ref_modes[i].c = bath_coup[i];
+        modes[i].omega = ref_modes[i].omega = bath.bathFreq[i];
+        modes[i].c = ref_modes[i].c = bath.bathCoup[i];
     }
 
     map<unsigned long long, unsigned> pathMap;
@@ -378,8 +258,7 @@ int main(int argc, char * argv[])
         // generate ICs for HOs using MC walk (we use last step's
         // ICs as current step's IC seed)
 
-        double ratio = ic_gen(xvals, pvals, bath_freq, bath_coup, 
-                x_step, p_step, gen, simData);
+        bath.ic_gen(gen, simData);
 
         // for time points < kmax
 
@@ -394,15 +273,15 @@ int main(int argc, char * argv[])
         pstart.fwd_path.push_back(0);   // left-localized
         pstart.bwd_path.push_back(0);   // left-localized
         pstart.product = 1.0;
-        pstart.x0.assign(xvals, xvals+simData.bath_modes);
-        pstart.p0.assign(pvals, pvals+simData.bath_modes);
+        pstart.x0.assign(bath.xVals.begin(), bath.xVals.end());
+        pstart.p0.assign(bath.pVals.begin(), bath.pVals.end());
 
         pathList.push_back(pstart);
 
         // initialize propagator ICs
 
-        curr_prop.x0_free.assign(xvals, xvals+simData.bath_modes);
-        curr_prop.p0_free.assign(pvals, pvals+simData.bath_modes);
+        curr_prop.x0_free.assign(bath.xVals.begin(), bath.xVals.end());
+        curr_prop.p0_free.assign(bath.pVals.begin(), bath.pVals.end());
 
         // loop over first kmax time points
 
@@ -935,13 +814,6 @@ int main(int argc, char * argv[])
 
     // cleanup
 
-    delete [] bath_freq;
-    delete [] bath_coup;
-
-    delete [] xvals;
-    delete [] pvals;
-    delete [] x_step;
-    delete [] p_step;
 
     //delete [] prop;
     delete [] curr_prop.prop;
@@ -1268,452 +1140,6 @@ void print_header(const char * msg, const char * separator,
 
 /* ------------------------------------------------------------------------ */
 
-void read_spec(std::string spec_name, std::vector<double> & omega, 
-        std::vector<double> & jvals, Tokenizer & tok)
-{
-    ifstream spec_file;
-    std::string buffer;
-    std::string entry;
-    const char comment_char = '#';
-
-    spec_file.open(spec_name.c_str(), std::ios_base::in);
-
-    if (!spec_file.is_open())
-        throw std::runtime_error("Could not open spectral density file\n");
-
-    // read in file line-by-line
-
-    Tokenizer::iterator iter;
-
-    while (getline(spec_file, buffer))
-    {   
-        tok.assign(buffer);
-
-        iter = tok.begin();
-
-        // skip empty lines and comments
-
-        if (tok.begin() == tok.end())
-            continue;
-
-        entry = *iter;
-
-        if (entry[0] == comment_char)
-            continue;
-
-        omega.push_back(boost::lexical_cast<double>(entry));
-
-        // assign arguments
-
-        ++iter;
-
-        if (iter == tok.end())
-            throw std::runtime_error("Incomplete line in spectral density file\n");
-
-        entry = *iter;
-
-        jvals.push_back(boost::lexical_cast<double>(entry)); 
-
-    } // end specden reading
-
-    spec_file.close();
-}
-
-/* ------------------------------------------------------------------------ */
-
-void bath_setup(double * bath_freq, double * bath_coup, std::string spec_name,
-        int nmodes, Tokenizer & tok)
-{
-    // read in spectral density from file
-
-    std::vector<double> omega;
-    std::vector<double> jvals;
-
-    read_spec(spec_name, omega, jvals, tok);
-
-    // first calculate reorg energy via simple integration
-
-    double dw = omega[1] - omega[0];    // assumes uniform spacing
-    double sum = 0.0;
-
-    sum += (jvals.front() + jvals.back())/2.0;
-
-    for (unsigned i = 1; i < jvals.size()-1; i++)
-        sum += jvals[i];
-
-    sum *= dw;
-
-    double w0 = sum/nmodes;
-
-    // report reorg energy to command line
-
-    int me;
-    MPI_Comm_rank(MPI_COMM_WORLD, &me);
-    
-    double pi = acos(-1.0);
-    double reorg = 4.0 * sum / pi;
-
-    if (me == 0)
-    {
-        //fprintf(stdout, "dw = %.15e\n", dw);
-        fprintf(stdout, "Reorg. energy (au): %.7f\n", reorg);
-    }
-
-    // discretize frequencies
-
-    // NOTE: notation here is weird to match Tuseeta's
-    //  results; I can't seem to replicate them using
-    //  normal C syntax, should probably look into this
-
-    for (int j = 0; j < nmodes; j++)
-    {
-        sum = 0.0;
-        long i = -1;
-    
-        while (sum <= (j+1) && i < static_cast<long>(jvals.size()-2))
-        {
-            i++;
-            sum += jvals[i]*dw/w0;
-        }
-
-        bath_freq[j] = omega[i];
-    }
-
-    // check modes for 0 vals (may create workaround)
-
-    for (int i = 0; i < nmodes; i++)
-    {
-        if (bath_freq[i] == 0)
-        {
-            for (int j = i; j < nmodes; j++)
-            {
-                if (bath_freq[j] != 0)
-                {
-                    bath_freq[i] = bath_freq[j]/2.0;    
-                    break;
-                }
-            }
-
-            if (bath_freq[i] == 0)
-                throw std::runtime_error("All modes have zero frequency\n");
-        }
-    }
-
-    for (int i = 0; i < nmodes; i++)
-        bath_coup[i] = sqrt(2.0*w0/pi) * bath_freq[i];
-
-}
-
-/*----------------------------------------------------------------------*/
-
-void calibrate_mc(double * x_step, double * p_step, double * bath_freq, 
-    double * bath_coup, gsl_rng * gen, SimInfo & simData)
-{
-    const double max_trials = 1000;
-    const double base_step = 10.0;
-    const double scale = 0.8;
-    const double low_thresh = 0.45;
-    const double high_thresh = 0.55;
-    const int tsteps = 1000;
-    double * x_vals = new double [simData.bath_modes];
-    double * p_vals = new double [simData.bath_modes];
-
-    // initialize step sizes and (x,p) at minimum of x
-
-    for (int i = 0; i < simData.bath_modes; i++)
-    {
-        x_step[i] = gsl_rng_uniform(gen) * base_step;
-        p_step[i] = gsl_rng_uniform(gen) * base_step;
-        x_vals[i] = bath_coup[i] * ( dvr_left/(mass*bath_freq[i]*bath_freq[i]) );
-        p_vals[i] = 0.0;
-    }
-
-    double x_old, x_new;
-    double p_old, p_new;
-    int accepted;
-
-    // run MC step tweaking for each mode and phase space dim. separately
-
-    for (int i = 0; i < simData.bath_modes; i++)
-    {
-        int count = 0;
-
-        while (count <= max_trials)    // keep looping until convergence
-        {
-            x_old = x_vals[i];
-            p_old = p_vals[i];
-            accepted = 1;
-
-            for (int j = 0; j < tsteps; j++)
-            {
-                double step_len = gsl_rng_uniform(gen) * x_step[i];
-
-                // displace x coord.
-
-                if (gsl_rng_uniform_int(gen, 2) == 0)
-                    x_new = x_old + step_len;
-                else
-                    x_new = x_old - step_len;
-
-                // keep p constant for this run
-
-                p_new = p_old;
-
-                // pass in p_old for both configs
-                // this makes sure p isn't affected
-
-                double prob = dist(x_old, x_new, p_old, p_old, bath_freq[i], 
-                    bath_coup[i], simData.beta);
-
-                if (prob >= 1.0) // accept
-                {
-                    // update state
-                    x_old = x_new;     
-                    p_old = p_new;
-                    accepted++;
-                }
-                else
-                {    
-                    double xi = gsl_rng_uniform(gen);
-    
-                    if (prob >= xi) // accept (rescue)
-                    {    
-                        // update state
-                        x_old = x_new;     
-                        p_old = p_new;
-                        accepted++;  
-                    }
-                    else // reject
-                    {
-                        // technically a null operation
-                        x_old = x_old;
-                        p_old = p_old;
-                    }
-                }
-
-            } // end x-space MC trials
-
-            double ratio = static_cast<double>(accepted)/tsteps;
-
-            // check ratio for convergence
-
-            if (ratio >= low_thresh && ratio <= high_thresh)    // step is good
-                break;
-            else if (ratio < low_thresh)                // step too large, decrease
-                x_step[i] *= scale;
-            else                                 // step too small, increase
-                x_step[i] /= scale;    
-    
-
-            count++;
-
-        } // end while loop
-
-        if (count >= max_trials)
-            throw std::runtime_error("Failed to properly converge MC optimization in x-coord.\n");
-
-    } // end x calibration
-
-    // begin calibrating p steps
-
-    for (int i = 0; i < simData.bath_modes; i++)
-    {
-        x_vals[i] = bath_coup[i] * ( dvr_left/(mass*bath_freq[i]*bath_freq[i]) );
-        p_vals[i] = 0.0;
-    }
-
-    // run MC step tweaking for each mode 
-
-    for (int i = 0; i < simData.bath_modes; i++)
-    {
-        int count = 0;
-
-        while (count <= max_trials)    // keep looping until convergence
-        {
-            x_old = x_vals[i];
-            p_old = p_vals[i];
-            accepted = 1;
-
-            for (int j = 0; j < tsteps; j++)
-            {
-                double step_len = gsl_rng_uniform(gen) * p_step[i];
-
-                // displace p coord.
-
-                if (gsl_rng_uniform_int(gen, 2) == 0)
-                    p_new = p_old + step_len;
-                else
-                    p_new = p_old - step_len;
-
-                // keep x constant for this run
-
-                x_new = x_old;
-
-                // use x_old for both configurations
-                // this makes sure x isn't affected
-
-                double prob = dist(x_old, x_old, p_old, p_new, bath_freq[i], 
-                    bath_coup[i], simData.beta);
-
-                if (prob >= 1.0) // accept
-                {
-                    // update state
-                    x_old = x_new;     
-                    p_old = p_new;
-                    accepted++;
-                }
-                else
-                {    
-                    double xi = gsl_rng_uniform(gen);
-    
-                    if (prob >= xi) // accept (rescue)
-                    {    
-                        // update state
-                        x_old = x_new;     
-                        p_old = p_new;
-                        accepted++;  
-                    }
-                    else // reject
-                    {
-                        // technically a null operation
-                        x_old = x_old;
-                        p_old = p_old;
-                    }
-                }
-
-            } // end p-space MC trials
-
-            double ratio = static_cast<double>(accepted)/tsteps;
-
-            // check ratio for convergence
-
-            if (ratio >= low_thresh && ratio <= high_thresh)    // step is good
-                break;
-            else if (ratio < low_thresh)                // step too large, decrease
-                p_step[i] *= scale;
-            else                                 // step too small, increase
-                p_step[i] /= scale;    
-    
-            count++;
-
-        } // end while loop
-
-        if (count >= max_trials)
-            throw std::runtime_error("Failed to converge MC optimization in p-coord.\n");
-
-    } // end p tweak
-
-    delete [] x_vals;
-    delete [] p_vals; 
-}
-
-/* ------------------------------------------------------------------------ */
-
-double ic_gen(double * xvals, double * pvals, double * bath_freq, double * bath_coup,
-    double * x_step, double * p_step, gsl_rng * gen, SimInfo & simData)
-{   
-    double x_old, x_new;
-    double p_old, p_new;
-
-    long accepted = 1;
-
-    for (long i = 1; i < simData.mc_steps; i++)
-    { 
-        // randomly select index to step, and generate
-        // step size in x and p dimension
-
-        int index = gsl_rng_uniform_int(gen, simData.bath_modes);
-        double x_len = gsl_rng_uniform(gen) * x_step[index];
-        double p_len = gsl_rng_uniform(gen) * p_step[index];
-
-        x_old = xvals[index];
-        p_old = pvals[index];
-
-        // displace x coord.
-
-        if (gsl_rng_uniform_int(gen, 2) == 0)
-            x_new = x_old + x_len;
-        else
-            x_new = x_old - x_len;
-
-        // displace p coord.
-
-        if (gsl_rng_uniform_int(gen, 2) == 0)
-            p_new = p_old + p_len;
-        else
-            p_new = p_old - p_len;
-
-        // find probability ratio of new configuration
-        // stationary modes divide out, so we only pass info
-        // for the currently active mode specified by index
-
-        double prob = dist(x_old, x_new, p_old, p_new, bath_freq[index], 
-            bath_coup[index], simData.beta);
-
-        if (prob >= 1.0) // accept
-        {
-            // update state
-            xvals[index] = x_new;     
-            pvals[index] = p_new;
-            accepted++;
-        }
-        else
-        {
-            double xi = gsl_rng_uniform(gen);
-    
-            if (prob >= xi) // accept (rescued)
-            {
-                // update state
-                xvals[index] = x_new;     
-                pvals[index] = p_new;
-                accepted++;  
-            }
-            else // reject
-            {
-                // technically a null operation
-                xvals[index] = x_old;
-                pvals[index] = p_old;
-            }
-        }
-
-    }
-
-    double ratio = static_cast<double>(accepted)/simData.mc_steps;
-
-    return ratio;
-}
-
-/* ------------------------------------------------------------------------ */
-
-double dist(double x_old, double x_new, double p_old, double p_new, 
-    double omega, double coup, double beta)
-{
-    // need atomic units     
-    double f = hbar*omega*beta;
-
-    // shift to DVR state w/ -1 element in sigma_z basis
-
-    double lambda = dvr_left * coup * ( 1.0/(mass*omega*omega) );
-
-    // shifting distribution for equilibrium
-
-    x_new -= lambda;
-    x_old -= lambda;
-
-    // calculate Wigner distribution ratio for these x,p vals
-
-    double delta = (mass*omega/hbar)*(x_new*x_new - x_old*x_old) +
-        (1.0/(mass*omega*hbar))*(p_new*p_new - p_old*p_old);
-
-    double pre = tanh(f/2.0);
-
-    double prob = exp(-pre*delta);
-
-    return prob; 
-}
-
-/* ------------------------------------------------------------------------ */
-
 void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state, 
         SimInfo & simData)
 {
@@ -2005,7 +1431,6 @@ void prop_eqns(double t, complex<double> * y, complex<double> * dydt,
     void * params)
 {
     complex<double> * ham = (complex<double> *) params;
-    complex<double> I(0.0, 1.0);
 
     // this is component version of i*hbar*(dU/dt) = H*U
     // could as write as traditional matrix multiplication
