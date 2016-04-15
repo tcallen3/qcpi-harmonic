@@ -22,6 +22,7 @@
 //         dvr_left = 0.0 and dvr_right = -2.0. Other desired 
 //          shifts can be extrapolated from this example.
 
+#include "harmonic.h"
 #include "initial_bath.h"
 
 using namespace qcpiConstNS;
@@ -158,26 +159,7 @@ int main(int argc, char * argv[])
 
     bath.bath_setup(simData.input_name, simData.bath_modes, tok, me);
 
-    // !! BEGIN DEBUG !!
-    
-    if (me == 0)
-        fprintf(stdout, "Made it past bath_setup\n");
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    
-    // !! END DEBUG !!
-
-
     bath.calibrate_mc(gen, simData);
-
-    // !! BEGIN DEBUG !!
-    
-    if (me == 0)
-        fprintf(stdout, "Made it past calibrate_mc\n");
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    
-    // !! END DEBUG !!
 
     // define ODE timestep
 

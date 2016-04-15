@@ -5,7 +5,7 @@
 #ifndef INITIAL_BATH_H
 #define INITIAL_BATH_H
 
-#include "qcpi_harmonic.h"
+#include "harmonic.h"
 
 class InitialBath
 {
