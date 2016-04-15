@@ -429,7 +429,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
     // initialize IC arrays
 
-    for (int i = 0; i < simData.bath_modes; i++)
+    for (int i = 0; i < simData.bathModes; i++)
     {
         double pos = bathCoup[i] * ( dvr_left/(mass*bathFreq[i]*bathFreq[i]) );
 
@@ -450,7 +450,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
 void InitialBath::ic_gen(gsl_rng * gen, SimInfo & simData)
 {
-    for (long i = 1; i < simData.mc_steps; i++)
+    for (long i = 1; i < simData.mcSteps; i++)
     { 
         // randomly select index to step, and generate
         // step size in x and p dimension

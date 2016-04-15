@@ -81,27 +81,4 @@ struct Mode
     double second_phase;
 };
 
-struct SimInfo
-{
-    // basic simulation params
-
-    Branch branch_state;     // what state to use for iterative branching
-    double asym;
-    int bath_modes;
-    long mc_steps;
-    int ic_tot;
-    double dt;
-    double rho_dt;
-    int qm_steps;
-    int kmax;
-    int step_pts;
-    int chunks;
-    int rho_steps;
-    double bath_temp;
-    double beta; 
-    std::string input_name;
-    std::string output_name;
-    unsigned long seed;
-};
-
 #endif

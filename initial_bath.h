@@ -6,6 +6,7 @@
 #define INITIAL_BATH_H
 
 #include "harmonic.h"
+#include "sim_info.h"
 
 class InitialBath
 {
