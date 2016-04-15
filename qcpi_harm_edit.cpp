@@ -1,4 +1,4 @@
-/* hbath_mem_analytic.cpp - a program to read in
+/*  qcpi_harmonic.cpp - a program to read in
     a spectral density in atomic units,
     calculate the equivalent harmonic bath 
     modes and couplings, and then run 
@@ -31,7 +31,6 @@ using namespace qcpiConstNS;
 
 // startup and helper functions
 void startup(std::string config, struct SimInfo * sim, Tokenizer & tok); // EDITED
-void print_header(const char *, const char *, int, FILE *);
 
 // EDIT NOTE: (Need to remove NR ODE functions and reimplement)
 // propagator integration
@@ -95,20 +94,10 @@ int main(int argc, char * argv[])
     if (simData.ic_tot < nprocs)
         throw std::runtime_error("Too few ICs for processor number\n");
 
-    // open files for I/O
+    // open output file for I/O on single proc, opening early to 
+    // prevent I/O errors from terminating run
 
-    FILE * infile;
     FILE * outfile;
-
-    infile = fopen(simData.input_name.c_str(), "r");
-
-    if (infile == NULL)
-    {
-        throw std::runtime_error("Could not open file " + 
-                simData.input_name + "\n");
-    }
-
-    // only open output file on I/O proc
 
     if (me == 0)
     {
@@ -124,8 +113,6 @@ int main(int argc, char * argv[])
     // begin timing calculation
 
     double start = MPI_Wtime();
-
-    // discretize bath modes
 
     // divide up ICs across procs
     
@@ -149,21 +136,13 @@ int main(int argc, char * argv[])
 
     gsl_rng_set(gen, s_val);
 
-    // EDIT NOTES: Consider moving x and p data, along with bath w and c
-    // values into an object or structure, for both conceptual coherence
-    // and cleaner code
-
-    // run test MC trials to determine optimal step sizes
+    // prepare the harmonic bath modes
 
     InitialBath bath;
 
     bath.bath_setup(simData.input_name, simData.bath_modes, tok, me);
 
     bath.calibrate_mc(gen, simData);
-
-    // define ODE timestep
-
-    simData.rho_dt = simData.dt/simData.chunks;
 
     // create propagator object
 
@@ -1032,6 +1011,8 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
 
     sim->step_pts = factor * sim->chunks;
 
+    sim->rho_dt = sim->dt/sim->chunks;
+
     // check positive-definite quantities
 
     if (sim->bath_modes <= 0)
@@ -1095,29 +1076,6 @@ void startup(std::string config, struct SimInfo * sim, Tokenizer & tok)
         throw std::runtime_error("Quantum step number smaller than kmax\n");
 
     conf_file.close();
-}
-
-/*----------------------------------------------------------------------*/
-
-// print_header() -- prints a message (msg) enclosed vertically by
-// repeated separator symbols (used for pretty printing)
-
-void print_header(const char * msg, const char * separator, 
-    int repeat, FILE * outfile)
-{
-    for (int i = 0; i < repeat; i++)
-        fprintf(outfile, "%s", separator);
-
-    fprintf(outfile, "\n");
-
-    fprintf(outfile, "%s", msg);
-
-    fprintf(outfile, "\n");
-
-    for (int i = 0; i < repeat; i++)
-        fprintf(outfile, "%s", separator);
-
-    fprintf(outfile, "\n\n");
 }
 
 /* ------------------------------------------------------------------------ */
