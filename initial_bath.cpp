@@ -172,10 +172,6 @@ void InitialBath::bath_setup(std::string specName, int numModes,
 
     // discretize frequencies
 
-    // NOTE: notation here is weird to match Tuseeta's
-    //  results; I can't seem to replicate them using
-    //  normal C syntax, should probably look into this
-
     for (int j = 0; j < numModes; j++)
     {
         sum = 0.0;
@@ -262,12 +258,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
                 // displace x coord.
 
                 xNew = xOld + pow(-1.0, gsl_rng_uniform_int(gen,2))*stepLen;
-/*
-                if (gsl_rng_uniform_int(gen, 2) == 0)
-                    xNew = xOld + stepLen;
-                else
-                    xNew = xOld - stepLen;
-*/
+
                 // keep p constant for this run
 
                 pNew = pOld;
@@ -276,38 +267,6 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
                 accepted += incr;
 
-                // pass in pOld for both configs
-                // this makes sure p isn't affected
-/*
-                double prob = dist(xOld, xNew, pOld, pOld, bathFreq[i], 
-                    bathCoup[i], simData.beta);
-
-                if (prob >= 1.0) // accept
-                {
-                    // update state
-                    xOld = xNew;     
-                    pOld = pNew;
-                    accepted++;
-                }
-                else
-                {    
-                    double xi = gsl_rng_uniform(gen);
-    
-                    if (prob >= xi) // accept (rescue)
-                    {    
-                        // update state
-                        xOld = xNew;     
-                        pOld = pNew;
-                        accepted++;  
-                    }
-                    else // reject
-                    {
-                        // technically a null operation
-                        xOld = xOld;
-                        pOld = pOld;
-                    }
-                }
-*/
             } // end x-space MC trials
 
             double ratio = static_cast<double>(accepted)/iterCount;
@@ -359,12 +318,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
                 // displace p coord.
 
                 pNew = pOld + pow(-1.0, gsl_rng_uniform_int(gen,2))*stepLen;
-/*
-                if (gsl_rng_uniform_int(gen, 2) == 0)
-                    pNew = pOld + stepLen;
-                else
-                    pNew = pOld - stepLen;
-*/
+
                 // keep x constant for this run
 
                 xNew = xOld;
@@ -373,38 +327,6 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
                 accepted += incr;
 
-               // use xOld for both configurations
-                // this makes sure x isn't affected
-/*
-                double prob = dist(xOld, xOld, pOld, pNew, bathFreq[i], 
-                    bathCoup[i], simData.beta);
-
-                if (prob >= 1.0) // accept
-                {
-                    // update state
-                    xOld = xNew;     
-                    pOld = pNew;
-                    accepted++;
-                }
-                else
-                {    
-                    double xi = gsl_rng_uniform(gen);
-    
-                    if (prob >= xi) // accept (rescue)
-                    {    
-                        // update state
-                        xOld = xNew;     
-                        pOld = pNew;
-                        accepted++;  
-                    }
-                    else // reject
-                    {
-                        // technically a null operation
-                        xOld = xOld;
-                        pOld = pOld;
-                    }
-                }
-*/
             } // end p-space MC trials
 
             double ratio = static_cast<double>(accepted)/iterCount;

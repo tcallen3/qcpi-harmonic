@@ -21,12 +21,12 @@ clean:
 qcpi_harm_edit: qcpi_harm_edit.o initial_bath.o sim_info.o
 	$(CC) -o qcpi_harm_edit qcpi_harm_edit.o initial_bath.o sim_info.o $(LFLAGS)
 
-qcpi_harm_edit.o: qcpi_harm_edit.cpp 
+qcpi_harm_edit.o: qcpi_harm_edit.cpp harmonic.h initial_bath.h sim_info.h
 	$(CC) $(CFLAGS) -c qcpi_harm_edit.cpp
 
-initial_bath.o: initial_bath.cpp 
+initial_bath.o: initial_bath.cpp initial_bath.h sim_info.h
 	$(CC) $(CFLAGS) -c initial_bath.cpp
 
-sim_info.o: sim_info.cpp 
+sim_info.o: sim_info.cpp sim_info.h
 	$(CC) $(CFLAGS) -c sim_info.cpp
 
