@@ -1,32 +1,54 @@
-all: qcpi_harm_edit
+# Sub out c++ compiler
+CXX := mpic++
 
-# compiler
-CC = mpic++
+# Specify the final target name
+QCPI_EXE := qcpi_harm_edit
+ALL := $(QCPI_EXE)
 
-# flags
-CFLAGS = -Wall -O3
+# Specify the source files
+# Effectively list all source files in the current directory
+SRC := $(shell find ./ -maxdepth 1 -name "*.cpp")
 
-# include directory
-#IPATH = /mnt/people/tcallen3/local/include
+# Specify where to put the build temporary files
+BLD := build
 
-# library directory
-#LPATH = /mnt/people/tcallen3/local/lib
+OBJ := $(SRC:%.cpp=$(BLD)/%.o)
 
-# lib flags
-LFLAGS = -lgsl -lgslcblas -lm
+# From the object file list, get the dependency file list to handle automatic
+# recompilation when a header file is modified
+DEP := $(OBJ:.o=.d) 
 
+# Specify preprocessor flags (this is a built-in variable)
+CPPFLAGS := -Wall -O3 -MMD -MP
+
+# Specify linker flags (this is a built-in variable)
+LDFLAGS := 
+
+# Specify linker libraries (this is a built-in variable)
+LDLIBS := -lgsl -lgslcblas -lm
+
+# Tell make that these target are not real files
+.PHONY: all clean
+
+# Now the standard primary rule
+all: $(ALL)
+
+# How do we make the tests? Remember the recipe describe the linking phase
+$(QCPI_EXE): $(OBJ)
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+# The build directory is custom so we need to tell make how to do it
+# The build directory must exist before trying to compile
+$(BLD)/%.o: %.cpp | $(BLD)
+	$(CXX) $(CPPFLAGS) -o $@ -c $<
+
+# Simple rule to create the build directory if needed
+$(BLD):
+	mkdir $@
+
+# Let's clean up the mess, we can just remove the build directory alonside the executable
 clean:
-	rm *.o
+	$(RM) $(BLD)/*.o $(BLD)/*.d $(ALL)
 
-qcpi_harm_edit: qcpi_harm_edit.o initial_bath.o sim_info.o
-	$(CC) -o qcpi_harm_edit qcpi_harm_edit.o initial_bath.o sim_info.o $(LFLAGS)
-
-qcpi_harm_edit.o: qcpi_harm_edit.cpp harmonic.h initial_bath.h sim_info.h
-	$(CC) $(CFLAGS) -c qcpi_harm_edit.cpp
-
-initial_bath.o: initial_bath.cpp initial_bath.h sim_info.h
-	$(CC) $(CFLAGS) -c initial_bath.cpp
-
-sim_info.o: sim_info.cpp sim_info.h
-	$(CC) $(CFLAGS) -c sim_info.cpp
-
+# Don't forget to include the dependency files to let make know when to recompile
+-include $(DEP)
