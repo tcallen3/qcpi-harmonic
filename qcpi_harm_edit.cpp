@@ -696,55 +696,11 @@ int main(int argc, char * argv[])
 
         fprintf(outfile, "\n\n");
 
-        fprintf(outfile, "Quantum steps: %d\n", simData.qmSteps);
-        fprintf(outfile, "Memory length (kmax): %d\n", simData.kmax);
-        fprintf(outfile, "Step length (a.u): %.5f\n", simData.dt);
-        fprintf(outfile, "IC num: %d\n", simData.icTotal);
-        fprintf(outfile, "RNG seed: %lu\n", simData.seed);
-        fprintf(outfile, "MC skip: %ld\n", simData.mcSteps);
-
-        fprintf(outfile, "Analytic trajectory integration: on\n");
-
-        fprintf(outfile, "Simulation used EACP reference hopping\n");
-
-        fprintf(outfile, "Input spectral density: %s\n", simData.inputName.c_str());
+        fprintf(outfile, "Processors: %d\n", nprocs);
+        fprintf(outfile, "Total simulation time: %.3f min\n", g_runtime/60.0);
         fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
 
-        fprintf(outfile, "Total simulated time (a.u.): %.4f\n", simData.qmSteps*simData.dt);
-
-        fprintf(outfile, "Processors: %d\n\n", nprocs);
-        fprintf(outfile, "Total simulation time: %.3f min\n\n", g_runtime/60.0);
-
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\nBath Summary\n");
-
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\n\n");
-
-        fprintf(outfile, "Bath modes: %d\n", simData.bathModes);
-        fprintf(outfile, "Bath temperature: %.2f\n", simData.bathTemp);
-        fprintf(outfile, "Inverse temperature: %.4f\n", simData.beta);
-        fprintf(outfile, "Bath mode mass parameter: %.3f\n", mass);
-        fprintf(outfile, "Using shifted W(x,p) (minimum at x=lambda)\n\n");
-
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\nSystem Summary\n");
-
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\n\n");
-
-        fprintf(outfile, "Off-diagonal TLS element: %f\n", tls_freq);
-        fprintf(outfile, "Asymmetry: %.7e hartree\n", simData.asym);
-        fprintf(outfile, "Left DVR state: %.3f\n", dvr_left);
-        fprintf(outfile, "Right DVR state: %.3f\n\n", dvr_right);
+        simData.print(outfile);
 
         for (int i = 0; i < repeat; i++)
             fprintf(outfile, "-");

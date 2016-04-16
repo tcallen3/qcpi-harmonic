@@ -284,3 +284,58 @@ void SimInfo::sanity_check()
 }
 
 /* ------------------------------------------------------------------------- */
+
+void SimInfo::print(FILE * outfile)
+{
+    fprintf(outfile, "Quantum steps: %d\n", qmSteps);
+    fprintf(outfile, "Memory length (kmax): %d\n", kmax);
+    fprintf(outfile, "Step length (a.u): %.5f\n", dt);
+    fprintf(outfile, "IC num: %d\n", icTotal);
+    fprintf(outfile, "RNG seed: %lu\n", seed);
+    fprintf(outfile, "MC skip: %ld\n", mcSteps);
+
+    fprintf(outfile, "Analytic trajectory integration: on\n");
+
+    fprintf(outfile, "Simulation used EACP reference hopping\n");
+
+    fprintf(outfile, "Input spectral density: %s\n", inputName.c_str());
+
+    fprintf(outfile, "Total simulated time (a.u.): %.4f\n\n", qmSteps*dt);
+
+    int repeat = 50;
+
+    for (int i = 0; i < repeat; i++)
+        fprintf(outfile, "-");
+
+    fprintf(outfile, "\nBath Summary\n");
+
+    for (int i = 0; i < repeat; i++)
+        fprintf(outfile, "-");
+
+    fprintf(outfile, "\n\n");
+
+    fprintf(outfile, "Bath modes: %d\n", bathModes);
+    fprintf(outfile, "Bath temperature: %.2f\n", bathTemp);
+    fprintf(outfile, "Inverse temperature: %.4f\n", beta);
+    fprintf(outfile, "Bath mode mass parameter: %.3f\n", mass);
+    fprintf(outfile, "Using shifted W(x,p) (minimum at x=lambda)\n\n");
+
+    for (int i = 0; i < repeat; i++)
+        fprintf(outfile, "-");
+
+    fprintf(outfile, "\nSystem Summary\n");
+
+    for (int i = 0; i < repeat; i++)
+        fprintf(outfile, "-");
+
+    fprintf(outfile, "\n\n");
+
+    fprintf(outfile, "Off-diagonal TLS element: %f\n", tls_freq);
+    fprintf(outfile, "Asymmetry: %.7e hartree\n", asym);
+    fprintf(outfile, "Left DVR state: %.3f\n", dvr_left);
+    fprintf(outfile, "Right DVR state: %.3f\n\n", dvr_right);
+}
+
+/* ------------------------------------------------------------------------- */
+
+
