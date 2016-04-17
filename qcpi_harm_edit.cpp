@@ -135,11 +135,9 @@ int main(int argc, char * argv[])
 
     // prepare the harmonic bath modes
 
-    InitialBath bath;
+    InitialBath bath(simData.bathModes);
 
-    bath.bath_setup(simData.inputName, simData.bathModes, tok, me);
-
-    bath.calibrate_mc(gen, simData);
+    bath.bath_setup(simData, tok, gen, me);
 
     // create propagator object
 
@@ -700,7 +698,7 @@ int main(int argc, char * argv[])
         fprintf(outfile, "Total simulation time: %.3f min\n", g_runtime/60.0);
         fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
 
-        simData.print(outfile);
+        simData.print(outfile, repeat);
 
         for (int i = 0; i < repeat; i++)
             fprintf(outfile, "-");

@@ -285,7 +285,7 @@ void SimInfo::sanity_check()
 
 /* ------------------------------------------------------------------------- */
 
-void SimInfo::print(FILE * outfile)
+void SimInfo::print(FILE * outfile, int repeat)
 {
     fprintf(outfile, "Quantum steps: %d\n", qmSteps);
     fprintf(outfile, "Memory length (kmax): %d\n", kmax);
@@ -301,8 +301,6 @@ void SimInfo::print(FILE * outfile)
     fprintf(outfile, "Input spectral density: %s\n", inputName.c_str());
 
     fprintf(outfile, "Total simulated time (a.u.): %.4f\n\n", qmSteps*dt);
-
-    int repeat = 50;
 
     for (int i = 0; i < repeat; i++)
         fprintf(outfile, "-");
