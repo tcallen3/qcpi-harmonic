@@ -18,6 +18,7 @@
 using namespace std;
 
 typedef boost::tokenizer<boost::char_separator<char> > Tokenizer;
+typedef std::vector<complex<double> > cvector;
 
 namespace qcpiConstNS
 {
@@ -62,14 +63,6 @@ struct Path
     vector<double> p0;
 };
 
-struct Propagator
-{
-    complex<double> * prop;
-    complex<double> * ham;
-    complex<double> * ptemp;
-    vector<double> x0_free;
-    vector<double> p0_free;
-};
 
 struct Mode
 {
