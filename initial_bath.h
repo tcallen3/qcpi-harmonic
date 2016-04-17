@@ -15,6 +15,8 @@ class InitialBath
         double pOld, pNew;
         double xPick, pPick;
 
+        unsigned numModes;
+
         std::vector<double> xStep;
         std::vector<double> pStep;
 
@@ -29,8 +31,9 @@ class InitialBath
         std::vector<double> xVals;
         std::vector<double> pVals;
 
-        void bath_setup(std::string specName, int numModes, Tokenizer & tok, 
-                int myRank);
+        InitialBath(unsigned modes);
+        void bath_setup(SimInfo & simData, Tokenizer & tok, 
+            gsl_rng * gen, int myRank);
         void calibrate_mc(gsl_rng * gen, SimInfo & simData);
         void ic_gen(gsl_rng * gen, SimInfo & simData);
 };

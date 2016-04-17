@@ -9,6 +9,21 @@ using namespace qcpiConstNS;
 
 /* ------------------------------------------------------------------------- */
 
+InitialBath::InitialBath(unsigned modes)
+{
+    numModes = modes;
+
+    xStep.assign(numModes, 0.0);
+    pStep.assign(numModes, 0.0);
+
+    xVals.assign(numModes, 0.0);
+    pVals.assign(numModes, 0.0);
+
+    bathFreq.assign(numModes, 0.0);
+    bathCoup.assign(numModes, 0.0);
+}
+
+/* ------------------------------------------------------------------------- */
 void InitialBath::read_spec(std::string specName, std::vector<double> & omega, 
     std::vector<double> & jvals, Tokenizer & tok)
 {
@@ -138,15 +153,15 @@ double InitialBath::dist(unsigned index, double beta)
 
 /* ------------------------------------------------------------------------- */
 
-void InitialBath::bath_setup(std::string specName, int numModes, 
-        Tokenizer & tok, int myRank)
+void InitialBath::bath_setup(SimInfo & simData, Tokenizer & tok, gsl_rng * gen, 
+        int myRank)
 {
     // read in spectral density from file
 
     std::vector<double> omega;
     std::vector<double> jvals;
 
-    read_spec(specName, omega, jvals, tok);
+    read_spec(simData.inputName, omega, jvals, tok);
 
     // first calculate reorg energy via simple integration
 
@@ -172,7 +187,7 @@ void InitialBath::bath_setup(std::string specName, int numModes,
 
     // discretize frequencies
 
-    for (int j = 0; j < numModes; j++)
+    for (unsigned j = 0; j < numModes; j++)
     {
         sum = 0.0;
         long i = -1;
@@ -183,16 +198,16 @@ void InitialBath::bath_setup(std::string specName, int numModes,
             sum += jvals[i]*dw/w0;
         }
 
-        bathFreq.push_back(omega[i]);
+        bathFreq[j] = omega[i];
     }
 
     // check modes for 0 vals (may create workaround)
 
-    for (unsigned i = 0; i < bathFreq.size(); i++)
+    for (unsigned i = 0; i < numModes; i++)
     {
         if (bathFreq[i] == 0)
         {
-            for (unsigned j = i; j < bathFreq.size(); j++)
+            for (unsigned j = i; j < numModes; j++)
             {
                 if (bathFreq[j] != 0)
                 {
@@ -206,8 +221,10 @@ void InitialBath::bath_setup(std::string specName, int numModes,
         }
     }
 
-    for (int i = 0; i < numModes; i++)
-        bathCoup.push_back(sqrt(2.0*w0/pi) * bathFreq[i]);
+    for (unsigned i = 0; i < numModes; i++)
+        bathCoup[i] = sqrt(2.0*w0/pi) * bathFreq[i];
+
+    calibrate_mc(gen, simData);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -223,25 +240,28 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
     std::vector<double> xCurr;
     std::vector<double> pCurr;
 
+    xCurr.assign(numModes, 0.0);
+    pCurr.assign(numModes, 0.0);
+
     // initialize step sizes and (x,p) at minimum of x
 
-    for (unsigned i = 0; i < bathFreq.size(); i++)
+    for (unsigned i = 0; i < numModes; i++)
     {
-        xStep.push_back(gsl_rng_uniform(gen) * baseStep);
-        pStep.push_back(gsl_rng_uniform(gen) * baseStep);
+        xStep[i] = gsl_rng_uniform(gen) * baseStep;
+        pStep[i] = gsl_rng_uniform(gen) * baseStep;
 
         double pos = 
             bathCoup[i]*( dvr_left/(mass*bathFreq[i]*bathFreq[i]) );
 
-        xCurr.push_back(pos);
-        pCurr.push_back(0.0);
+        xCurr[i] = pos;
+        pCurr[i] = 0.0;
     }
 
     int accepted;
 
     // run MC step tweaking for each mode and phase space dim. separately
 
-    for (unsigned i = 0; i < bathFreq.size(); i++)
+    for (unsigned i = 0; i < numModes; i++)
     {
         int count = 0;
 
@@ -291,7 +311,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
     // begin calibrating p steps
 
-    for (unsigned i = 0; i < bathFreq.size(); i++)
+    for (unsigned i = 0; i < numModes; i++)
     {
         // re-initialize bath coordinates
         
@@ -301,7 +321,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
     // run MC step tweaking for each mode 
 
-    for (unsigned i = 0; i < bathFreq.size(); i++)
+    for (unsigned i = 0; i < numModes; i++)
     {
         int count = 0;
 
@@ -356,14 +376,14 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
         double pos = bathCoup[i] * ( dvr_left/(mass*bathFreq[i]*bathFreq[i]) );
 
         if (gsl_rng_uniform_int(gen, 2) == 0)
-            xVals.push_back(pos + gsl_rng_uniform(gen) * xStep[i]);
+            xVals[i] = pos + gsl_rng_uniform(gen) * xStep[i];
         else
-            xVals.push_back(pos - gsl_rng_uniform(gen) * xStep[i]);
+            xVals[i] = pos - gsl_rng_uniform(gen) * xStep[i];
 
         if (gsl_rng_uniform_int(gen, 2) == 0)
-            pVals.push_back(gsl_rng_uniform(gen) * pStep[i]);
+            pVals[i] = gsl_rng_uniform(gen) * pStep[i];
         else
-            pVals.push_back(-1.0 * gsl_rng_uniform(gen) * pStep[i]);
+            pVals[i] = -1.0 * gsl_rng_uniform(gen) * pStep[i];
     }
 
 }
@@ -377,7 +397,7 @@ void InitialBath::ic_gen(gsl_rng * gen, SimInfo & simData)
         // randomly select index to step, and generate
         // step size in x and p dimension
 
-        int index = gsl_rng_uniform_int( gen, bathFreq.size() );
+        int index = gsl_rng_uniform_int(gen, numModes);
         double xLen = gsl_rng_uniform(gen) * xStep[index];
         double pLen = gsl_rng_uniform(gen) * pStep[index];
 
