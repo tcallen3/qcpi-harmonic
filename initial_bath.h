@@ -31,7 +31,7 @@ class InitialBath
         std::vector<double> xVals;
         std::vector<double> pVals;
 
-        InitialBath(unsigned modes);
+        explicit InitialBath(unsigned modes);
         void bath_setup(SimInfo & simData, Tokenizer & tok, 
             gsl_rng * gen, int myRank);
         void calibrate_mc(gsl_rng * gen, SimInfo & simData);

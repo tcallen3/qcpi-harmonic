@@ -25,19 +25,9 @@
 #include "harmonic.h"
 #include "initial_bath.h"
 #include "sim_info.h"
+#include "propagator.h"
 
 using namespace qcpiConstNS;
-
-// propagator integration
-void ho_update_exact(Propagator &, Mode *, double, SimInfo &);
-void build_ham(Propagator &, Mode *, int, SimInfo &);
-
-// Need to remove NR ODE functions and reimplement
-void prop_eqns(double, complex<double> *, complex<double> *, void *);
-void rk4(complex<double> * y, complex<double> * dydx, int n, double x, double h, 
-    complex<double> * yout, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params);
-void rkdriver(complex<double> * vstart, complex<double> * out, int nvar, double x1,
-    double x2, int nstep, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params);
 
 // QCPI functions
 void qcpi_update_exact(Path &, Mode *, SimInfo &);
@@ -142,10 +132,6 @@ int main(int argc, char * argv[])
     // create propagator object
 
     Propagator curr_prop;
-
-    curr_prop.prop = new complex<double> [DSTATES*DSTATES];
-    curr_prop.ptemp = new complex<double> [DSTATES*DSTATES];
-    curr_prop.ham = new complex<double> [DSTATES*DSTATES];
 
     // EDIT NOTES: (consider using small object/struct here)
 
@@ -290,7 +276,7 @@ int main(int argc, char * argv[])
 
             // EDIT NOTES: (rename ho_update fns to something better)
 
-            ho_update_exact(curr_prop, ref_modes, ho_ref_state, simData);
+            curr_prop.ho_update_exact(ref_modes, ho_ref_state, simData);
 
                 // chunk trajectory into pieces for greater
                 // accuracy in integrating U(t)
@@ -299,21 +285,17 @@ int main(int argc, char * argv[])
             {
                 // construct H(x,p) from bath configuration
             
-                build_ham(curr_prop, ref_modes, chunk_num, simData);
+                curr_prop.build_ham(ref_modes, chunk_num, simData);
 
                 // integrate TDSE for U(t) w/ piece-wise constant
                 // Hamiltonian approx.
 
-                rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                    0.0, simData.rhoDelta, simData.rhoSteps, prop_eqns, curr_prop.ham);
+                curr_prop.rkdriver(DSTATES*DSTATES, 0.0, simData.rhoDelta, 
+                        simData.rhoSteps);
 
                 // swap out true and temp pointers
 
-                complex<double> * swap;
-
-                swap = curr_prop.prop;
-                curr_prop.prop = curr_prop.ptemp;
-                curr_prop.ptemp = swap;
+                curr_prop.prop.swap(curr_prop.ptemp);
 
             } // end chunk loop            
 
@@ -463,7 +445,7 @@ int main(int argc, char * argv[])
 
             // first find unforced (x,p)
 
-            ho_update_exact(curr_prop, ref_modes, ho_ref_state, simData);
+            curr_prop.ho_update_exact(ref_modes, ho_ref_state, simData);
 
             // chunk trajectory into pieces for greater
             // accuracy in integrating U(t)
@@ -472,21 +454,17 @@ int main(int argc, char * argv[])
             {
                 // construct H(x,p) from bath configuration
             
-                build_ham(curr_prop, ref_modes, chunk_num, simData);
+                curr_prop.build_ham(ref_modes, chunk_num, simData);
 
                 // integrate TDSE for U(t) w/ piece-wise constant
                 // Hamiltonian approx.
 
-                rkdriver(curr_prop.prop, curr_prop.ptemp, DSTATES*DSTATES, 
-                    0.0, simData.rhoDelta, simData.rhoSteps, prop_eqns, curr_prop.ham);
+                curr_prop.rkdriver(DSTATES*DSTATES, 0.0, simData.rhoDelta, 
+                        simData.rhoSteps);
 
                 // swap out true and temp pointers
 
-                complex<double> * swap;
-
-                swap = curr_prop.prop;
-                curr_prop.prop = curr_prop.ptemp;
-                curr_prop.ptemp = swap;
+                curr_prop.prop.swap(curr_prop.ptemp);
 
             } // end chunk loop            
 
@@ -726,11 +704,6 @@ int main(int argc, char * argv[])
 
     // cleanup
 
-
-    delete [] curr_prop.prop;
-    delete [] curr_prop.ptemp;
-    delete [] curr_prop.ham;
-
     for (int i = 0; i < simData.qmSteps; i++)
     {
         delete [] rho_proc[i];
@@ -750,162 +723,6 @@ int main(int argc, char * argv[])
 
     return 0;
 }
-
-/* ------------------------------------------------------------------------ */
-
-void ho_update_exact(Propagator & prop, Mode * mlist, double ref_state, 
-        SimInfo & simData)
-{
-    double del_t = simData.dt/2.0;
-    double chunk_dt = simData.dt/simData.chunks;
-
-    for (int mode = 0; mode < simData.bathModes; mode++)
-    {
-        double x0, xt;
-        double p0, pt;
-
-        double w = mlist[mode].omega;
-        double shift = (ref_state * mlist[mode].c)/(mass * w * w);
-
-        // first calculated x(t) at time points
-        // for propagator integration
-
-        // clear out any old trajectory info
-        // might be more efficient just to overwrite
-
-        mlist[mode].x_t.clear();
-
-        // set up ICs for chunk calc
-
-        x0 = prop.x0_free[mode];
-        p0 = prop.p0_free[mode];
-        
-        for (int i = 0; i < simData.chunks; i++)
-        {
-            // find x(t) at chunk time points
-
-            xt = (x0 - shift)*cos(w*chunk_dt) + 
-                (p0/(mass*w))*sin(w*chunk_dt) + shift;
-
-            pt = p0*cos(w*chunk_dt) - 
-                mass*w*(x0 - shift)*sin(w*chunk_dt);
-
-            mlist[mode].x_t.push_back(xt);
-
-            x0 = xt;
-            p0 = pt;
-        }
-
-        // set up ICs for trajectory
-
-        x0 = prop.x0_free[mode];
-        p0 = prop.p0_free[mode];
-
-        // calculate time-evolved x(t), p(t) for
-        // first half-step of trajectory
-
-        xt = (x0 - shift)*cos(w*del_t) + (p0/(mass*w))*sin(w*del_t) + shift;
-
-        pt = p0*cos(w*del_t) - mass*w*(x0 - shift)*sin(w*del_t);
-
-        mlist[mode].first_phase = (x0 - shift)*sin(w*del_t) - 
-            (p0/(mass*w))*(cos(w*del_t)-1.0) + shift*w*del_t;
-
-        // swap x0, p0 and xt, pt
-
-        x0 = xt;
-        p0 = pt;
-
-        // calculate time-evolved x(t), p(t) for
-        // second half-step of trajectory
-
-        xt = (x0 - shift)*cos(w*del_t) + (p0/(mass*w))*sin(w*del_t) + shift;
-
-        pt = p0*cos(w*del_t) - mass*w*(x0 - shift)*sin(w*del_t);
-
-        mlist[mode].second_phase = (x0 - shift)*sin(w*del_t) - 
-            (p0/(mass*w))*(cos(w*del_t)-1.0) + shift*w*del_t;
-
-        // update current phase space point
-
-        prop.x0_free[mode] = xt;
-        prop.p0_free[mode] = pt;
-
-    } // end mode loop
-}
-
-/* ------------------------------------------------------------------------- */
-
-// construct system-bath Hamiltonian for
-// current timestep
-
-void build_ham(Propagator & prop, Mode * modes, int chunk, SimInfo & simData)
-{
-    // copy off-diagonal from anharmonic code
-    const double off_diag = hbar*tls_freq;
-
-    // store sums for diagonal matrix elements of H
-    // left_sum for (0,0); right_sum for (1,1)
-    double left_sum;
-    double right_sum;
-
-    // energy stores harmonic bath potential energy
-    // this should integrate out, but is included here
-    // for completeness
-    double energy = 0.0;
-
-    // store system and system-bath coupling contributions separately
-    complex<double> tls_mat[4];
-    complex<double> bath_mat[4];
-
-    // system matrix is just splitting and any asymmetry
-    // note that signs should be standard b/c I'm using
-    // (-1,+1) instead of (+1,-1)
-
-    tls_mat[0] = simData.asym; //dvr_left*(1.0*asym);
-    tls_mat[1] = -1.0*off_diag;
-    tls_mat[2] = -1.0*off_diag;
-    tls_mat[3] = -1.0*simData.asym; //dvr_right*(1.0*asym);
-
-    // system-bath matrix includes linear coupling plus
-    // quadratic offset
-
-    // in this form, it also includes the bath potential energy
-
-    left_sum = 0.0;
-    right_sum = 0.0;
-
-    for (int i = 0; i < simData.bathModes; i++)
-    {
-        double csquare = modes[i].c*modes[i].c;
-        double wsquare = modes[i].omega*modes[i].omega;
-        double x = modes[i].x_t[chunk];
-
-        left_sum += -1.0*modes[i].c*x*dvr_left +
-            csquare*dvr_left*dvr_left/(2.0*mass*wsquare);
-
-        right_sum += -1.0*modes[i].c*x*dvr_right +
-            csquare*dvr_right*dvr_right/(2.0*mass*wsquare);
-
-        energy += 0.5*mass*wsquare*x*x;
-    }
-
-    // Removing energy term to see if this is
-    // dominating energy gap and causing issues
-
-    bath_mat[0] = left_sum;
-    bath_mat[1] = 0.0;
-    bath_mat[2] = 0.0;
-    bath_mat[3] = right_sum;
-
-    // total hamiltonian is sum of system and system-bath parts
-
-    prop.ham[0] = tls_mat[0] + bath_mat[0];
-    prop.ham[1] = tls_mat[1] + bath_mat[1];
-    prop.ham[2] = tls_mat[2] + bath_mat[2];
-    prop.ham[3] = tls_mat[3] + bath_mat[3];
-
-} // end build_ham()
 
 /* ------------------------------------------------------------------------ */
 
@@ -1034,135 +851,6 @@ double action_calc_exact(Path & qm_path, Mode * mlist, Mode * reflist,
     } // end mode loop
 
     return action;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// propagator evolution
-
-void prop_eqns(double t, complex<double> * y, complex<double> * dydt, 
-    void * params)
-{
-    complex<double> * ham = (complex<double> *) params;
-
-    // this is component version of i*hbar*(dU/dt) = H*U
-    // could as write as traditional matrix multiplication
-
-    dydt[0] = -(I/hbar)*(ham[0]*y[0] + ham[1]*y[2]);
-    dydt[1] = -(I/hbar)*(ham[0]*y[1] + ham[1]*y[3]);
-    dydt[2] = -(I/hbar)*(ham[2]*y[0] + ham[3]*y[2]);
-    dydt[3] = -(I/hbar)*(ham[2]*y[1] + ham[3]*y[3]);
-}
-
-/* ------------------------------------------------------------------------ */
-
-/* rk4() implements a vanilla fourth-order Runge-Kutta ODE solver, 
-although this version has been tweaked to use complex numbers, since
-robust complex libraries are hard to find. The derivs fn pointer specifies
-the function that will define the ODE equations, and the params array is
-included for extra flexibility, as per GSL */
-
-void rk4(complex<double> * y, complex<double> * dydx, int n, double x, double h, 
-    complex<double> * yout, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params)
-{
-    int i;
-    double xh, h_mid, h_6;
-    complex<double> *dym, *dyt, *yt;
-
-    dym = new complex<double>[n];
-    dyt = new complex<double>[n];
-    yt = new complex<double>[n];
-
-    h_mid = 0.5*h;
-    h_6 = h/6.0;
-    xh = x+h_mid;
-
-    for (i = 0; i < n; i++)
-        yt[i] = y[i] + h_mid*dydx[i];    /* first step */
-    
-    (*derivs)(xh, yt, dyt, params);        /* second step */
-    
-    for (i = 0; i < n; i++)
-        yt[i] = y[i] + h_mid*dyt[i];    
-
-    (*derivs)(xh, yt, dym, params);        /* third step */
-
-    for (i = 0; i < n; i++)
-    {
-        yt[i] = y[i] + h*dym[i];
-        dym[i] += dyt[i];
-    }
-    
-    (*derivs)(x+h, yt, dyt, params);    /* fourth step */
-
-    for (i = 0; i < n; i++)
-        yout[i] = y[i] + h_6*(dydx[i] + dyt[i] + 2.0*dym[i]);
-
-    delete [] dym;
-    delete [] dyt; 
-    delete [] yt;    
-}
-
-/* ------------------------------------------------------------------------ */
-
-/* rkdriver() is an abstraction level that lets different integrators
-run using more or less the same input, it initializes some things and
-then simply calls the underlying function in a loop; we don't really use
-it much, but it was part of the NR approach so it got rolled in here */
-
-void rkdriver(complex<double> * vstart, complex<double> * out, int nvar, double x1,
-    double x2, int nstep, void (*derivs)(double, complex<double> *, complex<double> *, void * params), void * params)
-{
-    int i, k;
-    double x, h;
-    complex<double> *v, *vout, *dv;
-
-    //Error * ode_error = new Error(MPI_COMM_WORLD);
-
-    v = new complex<double>[nvar];
-    vout = new complex<double>[nvar];
-    dv = new complex<double>[nvar];
-
-    for (i = 0; i < nvar; i++)
-        v[i] = vstart[i];    /* initialize vector */
-
-    x = x1;
-    h = (x2-x1)/nstep;
-
-    for (k = 1; k <= nstep; k++)
-    {
-        (*derivs)(x, v, dv, params);
-        rk4(v, dv, nvar, x, h, vout, derivs, params);
-        if ((double)(x+h) == x)
-        {
-            fprintf(stderr, "x: %8.5f\n", x);
-            fprintf(stderr, "h: %13.10f\n", h);
-            fflush(stderr);
-
-            char err_msg[FLEN]; 
-
-            sprintf(err_msg, "Step size too small in rkdriver\n");
-
-            throw std::runtime_error(err_msg);
-
-            //ode_error->one("Step size too small in rkdriver");
-
-            //fprintf(stderr, "Step size too small in rkdriver\n");
-            //exit(EXIT_FAILURE);
-        }
-        x += h;
-        for (i = 0; i < nvar; i++)
-            v[i] = vout[i];
-    }
-
-    for (i = 0; i < nvar; i++)
-        out[i] = vout[i];
-
-    delete [] v;
-    delete [] vout;
-    delete [] dv;
-
-    //delete ode_error;
 }
 
 /* ------------------------------------------------------------------------ */
