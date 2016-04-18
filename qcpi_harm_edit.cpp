@@ -131,7 +131,7 @@ int main(int argc, char * argv[])
 
     // create propagator object
 
-    Propagator curr_prop;
+    Propagator curr_prop(simData.qmSteps);
 
     // EDIT NOTES: (consider using small object/struct here)
 
@@ -161,9 +161,7 @@ int main(int argc, char * argv[])
 
     // set up variables to store current and past reference state
 
-    Ref * old_ref_list = new Ref [simData.qmSteps];
 
-    old_ref_list[0] = REF_LEFT;
 
     // initialize harmonic bath arrays
 
@@ -180,7 +178,6 @@ int main(int argc, char * argv[])
 
     // set up variable to store current reference state
 
-    double ho_ref_state = dvr_left;
 
     // Following loops are the core computational ones
 
@@ -260,7 +257,32 @@ int main(int argc, char * argv[])
 
             // run unforced trajectory and integrate U(t)
 
-            curr_prop.update(ref_modes, ho_ref_state, simData);
+            // select reference state for next timestep
+
+            curr_prop.pick_ref(rho_ic_proc, seg, gen);
+/*
+            double xi = gsl_rng_uniform(gen);
+            double rhoVal;
+
+            if ((seg-1) < 0)
+                rhoVal = 1.0;
+            else
+                rhoVal = rho_ic_proc[seg-1].real();
+
+            if (xi < rhoVal)
+            {
+                ho_ref_state = dvr_left;
+
+                old_ref_list[seg] = REF_LEFT;
+            }
+            else    
+            {
+                ho_ref_state = dvr_right;
+
+                old_ref_list[seg] = REF_RIGHT;
+            }
+*/
+            curr_prop.update(ref_modes, simData);
 
             // loop over all paths at this time point
 
@@ -305,23 +327,6 @@ int main(int argc, char * argv[])
                     rho_ic_proc[seg] += pathList[path].product;
 
             } // end path loop (full path phase)
-
-            // select reference state for next timestep
-
-            double xi = gsl_rng_uniform(gen);
-
-            if (xi < rho_ic_proc[seg].real())
-            {
-                ho_ref_state = dvr_left;
-
-                old_ref_list[seg+1] = REF_LEFT;
-            }
-            else    
-            {
-                ho_ref_state = dvr_right;
-
-                old_ref_list[seg+1] = REF_RIGHT;
-            }
 
             tempList.clear();
 
@@ -368,6 +373,8 @@ int main(int argc, char * argv[])
             // using stochastically determined branching
             // and harmonic reference states
 
+            curr_prop.pick_ref(rho_ic_proc, seg, gen);
+/*
                 double xi = gsl_rng_uniform(gen);
 
                 // choose reference state for EACP
@@ -384,10 +391,10 @@ int main(int argc, char * argv[])
 
                     old_ref_list[seg] = REF_RIGHT;
                 }
-
+*/
                 // choose branching kmax steps back
 
-                if (old_ref_list[seg-simData.kmax] == REF_LEFT)
+                if (curr_prop.oldRefs[seg-simData.kmax] == REF_LEFT)
                     fRand = bRand = 0;
                 else
                     fRand = bRand = 1;
@@ -395,7 +402,7 @@ int main(int argc, char * argv[])
 
             // integrate unforced equations and find U(t)
 
-            curr_prop.update(ref_modes, ho_ref_state, simData);
+            curr_prop.update(ref_modes, simData);
 
             // set up tempList to hold our matrix mult.
             // intermediates
@@ -642,7 +649,6 @@ int main(int argc, char * argv[])
     delete [] rho_ic_proc;
     delete [] modes;
     delete [] ref_modes;
-    delete [] old_ref_list;
     delete [] rho_real_proc;
     delete [] rho_imag_proc;
     delete [] rho_real;

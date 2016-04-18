@@ -9,8 +9,11 @@ using namespace qcpiConstNS;
 
 /* ------------------------------------------------------------------------- */
 
-Propagator::Propagator()
+Propagator::Propagator(int qmSteps)
 {
+    refState = REF_LEFT;
+    oldRefs.assign(qmSteps, REF_LEFT);
+
     matLen = DSTATES;
 
     prop.assign(matLen*matLen, 0.0);
@@ -20,7 +23,32 @@ Propagator::Propagator()
 
 /* ------------------------------------------------------------------------- */
 
-void Propagator::update(Mode * refModes, double refState, SimInfo & simData)
+void Propagator::pick_ref(complex<double> * rho_ic_proc, int seg, gsl_rng * gen)
+{
+    double xi = gsl_rng_uniform(gen);
+    double rhoVal;
+
+    if ((seg-1) < 0)
+        rhoVal = 1.0;
+    else
+        rhoVal = rho_ic_proc[seg-1].real();
+
+    if (xi < rhoVal)
+    {
+        refState = dvr_left;
+        oldRefs[seg] = REF_LEFT;
+    }
+    else    
+    {
+        refState = dvr_right;
+        oldRefs[seg] = REF_RIGHT;
+    }
+
+}
+
+/* ------------------------------------------------------------------------- */
+
+void Propagator::update(Mode * refModes, SimInfo & simData)
 {
     // run unforced trajectory and integrate U(t)
 
@@ -38,7 +66,7 @@ void Propagator::update(Mode * refModes, double refState, SimInfo & simData)
     // first find unforced (x,p)
     // note that ho_update_exact clears ref_modes x(t) and p(t) list
 
-    ho_update_exact(refModes, refState, simData);
+    ho_update_exact(refModes, simData);
 
     // chunk trajectory into pieces for greater
     // accuracy in integrating U(t)
@@ -63,8 +91,7 @@ void Propagator::update(Mode * refModes, double refState, SimInfo & simData)
 
 /* ------------------------------------------------------------------------- */
 
-void Propagator::ho_update_exact(Mode * mlist, double refState, 
-        SimInfo & simData)
+void Propagator::ho_update_exact(Mode * mlist, SimInfo & simData)
 {
     double delta = simData.dt/2.0;
     double chunkDelta = simData.dt/simData.chunks;

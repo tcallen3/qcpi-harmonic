@@ -16,8 +16,7 @@ class Propagator
         cvector ham;
         cvector ptemp;
 
-        void ho_update_exact(Mode * mlist, double refState, 
-            SimInfo & simData);
+        void ho_update_exact(Mode * mlist, SimInfo & simData);
         void build_ham(Mode * modes, int chunk, SimInfo & simData);
         void prop_eqns(double t, complex<double> * y, complex<double> * dydt);
         void rk4(complex<double> * y, complex<double> * dydx, int n, 
@@ -26,11 +25,14 @@ class Propagator
 
     public:
         cvector prop;
+        std::vector<Ref> oldRefs;
+        double refState;
         vector<double> xRef;
         vector<double> pRef;
 
-        Propagator();
-        void update(Mode * mlist, double ref_state, SimInfo & simData);
+        explicit Propagator(int qmSteps);
+        void update(Mode * mlist, SimInfo & simData);
+        void pick_ref(complex<double> * rho_ic_proc, int seg, gsl_rng * gen);
 };
 
 #endif
