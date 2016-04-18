@@ -177,10 +177,16 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
     // note that signs should be standard b/c I'm using
     // (-1,+1) instead of (+1,-1)
 
-    tls_mat[0] = dvrVals[0]*simData.asym; //dvr_left*(1.0*asym);
-    tls_mat[1] = -1.0*offDiag;
-    tls_mat[2] = -1.0*offDiag;
-    tls_mat[3] = dvrVals[1]*simData.asym; //dvr_right*(1.0*asym);
+    for (int i = 0; i < matLen; i++)
+    {
+        for (int j = 0; j < matLen; j++)
+        {
+            if (i == j)
+                tls_mat[i*matLen+j] = dvrVals[i]*simData.asym;
+            else
+                tls_mat[i*matLen+j] = -1.0*offDiag;
+        }
+    }
 
     // system-bath matrix includes linear coupling plus
     // quadratic offset
