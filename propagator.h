@@ -19,6 +19,8 @@ class Propagator
         vector<double> p0_free;
 
         Propagator();
+        void update(Mode * mlist, double ref_state, SimInfo & simData);
+
         void ho_update_exact(Mode * mlist, double ref_state, 
             SimInfo & simData);
         void build_ham(Mode * modes, int chunk, SimInfo & simData);

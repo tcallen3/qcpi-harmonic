@@ -260,44 +260,7 @@ int main(int argc, char * argv[])
 
             // run unforced trajectory and integrate U(t)
 
-            for (int i = 0; i < DSTATES; i++)
-            {
-                for (int j = 0; j < DSTATES; j++)
-                {
-                    if (i == j)
-                        curr_prop.prop[i*DSTATES+j] = 1.0;
-                    else
-                        curr_prop.prop[i*DSTATES+j] = 0.0;
-                }
-            }
-
-            // first find unforced (x,p)
-            // note that ho_update_exact clears ref_modes x(t) and p(t) list
-
-            // EDIT NOTES: (rename ho_update fns to something better)
-
-            curr_prop.ho_update_exact(ref_modes, ho_ref_state, simData);
-
-                // chunk trajectory into pieces for greater
-                // accuracy in integrating U(t)
-
-            for (int chunk_num = 0; chunk_num < simData.chunks; chunk_num++)
-            {
-                // construct H(x,p) from bath configuration
-            
-                curr_prop.build_ham(ref_modes, chunk_num, simData);
-
-                // integrate TDSE for U(t) w/ piece-wise constant
-                // Hamiltonian approx.
-
-                curr_prop.rkdriver(DSTATES*DSTATES, 0.0, simData.rhoDelta, 
-                        simData.rhoSteps);
-
-                // swap out true and temp pointers
-
-                curr_prop.prop.swap(curr_prop.ptemp);
-
-            } // end chunk loop            
+            curr_prop.update(ref_modes, ho_ref_state, simData);
 
             // loop over all paths at this time point
 
@@ -432,41 +395,7 @@ int main(int argc, char * argv[])
 
             // integrate unforced equations and find U(t)
 
-            for (int i = 0; i < DSTATES; i++)
-            {
-                for (int j = 0; j < DSTATES; j++)
-                {
-                    if (i == j)
-                        curr_prop.prop[i*DSTATES+j] = 1.0;
-                    else
-                        curr_prop.prop[i*DSTATES+j] = 0.0;    
-                }
-            }    
-
-            // first find unforced (x,p)
-
-            curr_prop.ho_update_exact(ref_modes, ho_ref_state, simData);
-
-            // chunk trajectory into pieces for greater
-            // accuracy in integrating U(t)
-
-            for (int chunk_num = 0; chunk_num < simData.chunks; chunk_num++)
-            {
-                // construct H(x,p) from bath configuration
-            
-                curr_prop.build_ham(ref_modes, chunk_num, simData);
-
-                // integrate TDSE for U(t) w/ piece-wise constant
-                // Hamiltonian approx.
-
-                curr_prop.rkdriver(DSTATES*DSTATES, 0.0, simData.rhoDelta, 
-                        simData.rhoSteps);
-
-                // swap out true and temp pointers
-
-                curr_prop.prop.swap(curr_prop.ptemp);
-
-            } // end chunk loop            
+            curr_prop.update(ref_modes, ho_ref_state, simData);
 
             // set up tempList to hold our matrix mult.
             // intermediates

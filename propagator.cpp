@@ -18,6 +18,49 @@ Propagator::Propagator()
 
 /* ------------------------------------------------------------------------- */
 
+void Propagator::update(Mode * refModes, double refState, SimInfo & simData)
+{
+    // run unforced trajectory and integrate U(t)
+
+    for (int i = 0; i < DSTATES; i++)
+    {
+        for (int j = 0; j < DSTATES; j++)
+        {
+            if (i == j)
+                prop[i*DSTATES+j] = 1.0;
+            else
+                prop[i*DSTATES+j] = 0.0;
+        }
+    }
+
+    // first find unforced (x,p)
+    // note that ho_update_exact clears ref_modes x(t) and p(t) list
+
+    ho_update_exact(refModes, refState, simData);
+
+    // chunk trajectory into pieces for greater
+    // accuracy in integrating U(t)
+
+    for (int chunkNum = 0; chunkNum < simData.chunks; chunkNum++)
+    {
+        // construct H(x,p) from bath configuration
+            
+        build_ham(refModes, chunkNum, simData);
+
+        // integrate TDSE for U(t) w/ piece-wise constant
+        // Hamiltonian approx.
+
+        rkdriver(DSTATES*DSTATES, 0.0, simData.rhoDelta, simData.rhoSteps);
+
+        // swap out true and temp pointers
+
+        prop.swap(ptemp);
+    } 
+
+}
+
+/* ------------------------------------------------------------------------- */
+
 void Propagator::ho_update_exact(Mode * mlist, double ref_state, 
         SimInfo & simData)
 {
