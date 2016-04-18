@@ -260,28 +260,7 @@ int main(int argc, char * argv[])
             // select reference state for next timestep
 
             curr_prop.pick_ref(rho_ic_proc, seg, gen);
-/*
-            double xi = gsl_rng_uniform(gen);
-            double rhoVal;
 
-            if ((seg-1) < 0)
-                rhoVal = 1.0;
-            else
-                rhoVal = rho_ic_proc[seg-1].real();
-
-            if (xi < rhoVal)
-            {
-                ho_ref_state = dvr_left;
-
-                old_ref_list[seg] = REF_LEFT;
-            }
-            else    
-            {
-                ho_ref_state = dvr_right;
-
-                old_ref_list[seg] = REF_RIGHT;
-            }
-*/
             curr_prop.update(ref_modes, simData);
 
             // loop over all paths at this time point
@@ -374,31 +353,13 @@ int main(int argc, char * argv[])
             // and harmonic reference states
 
             curr_prop.pick_ref(rho_ic_proc, seg, gen);
-/*
-                double xi = gsl_rng_uniform(gen);
 
-                // choose reference state for EACP
+            // choose branching kmax steps back
 
-                if (xi < rho_ic_proc[seg-1].real() )    
-                {
-                    ho_ref_state = dvr_left;
-
-                    old_ref_list[seg] = REF_LEFT;
-                }
-                else
-                {
-                    ho_ref_state = dvr_right;
-
-                    old_ref_list[seg] = REF_RIGHT;
-                }
-*/
-                // choose branching kmax steps back
-
-                if (curr_prop.oldRefs[seg-simData.kmax] == REF_LEFT)
-                    fRand = bRand = 0;
-                else
-                    fRand = bRand = 1;
-
+            if (curr_prop.oldRefs[seg-simData.kmax] == REF_LEFT)
+                fRand = bRand = 0;
+            else
+                fRand = bRand = 1;
 
             // integrate unforced equations and find U(t)
 
