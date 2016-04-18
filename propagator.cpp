@@ -161,23 +161,21 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
     double left_sum;
     double right_sum;
 
-    // energy stores harmonic bath potential energy
-    // this should integrate out, but is included here
-    // for completeness
-    double energy = 0.0;
-
     // store system and system-bath coupling contributions separately
-    complex<double> tls_mat[4];
-    complex<double> bath_mat[4];
+    std::vector<complex<double> > tls_mat;
+    std::vector<complex<double> > bath_mat;
+
+    tls_mat.assign(matLen*matLen, 0.0);
+    bath_mat.assign(matLen*matLen, 0.0);
 
     // system matrix is just splitting and any asymmetry
     // note that signs should be standard b/c I'm using
     // (-1,+1) instead of (+1,-1)
 
-    tls_mat[0] = simData.asym; //dvr_left*(1.0*asym);
+    tls_mat[0] = dvr_left*simData.asym; //dvr_left*(1.0*asym);
     tls_mat[1] = -1.0*off_diag;
     tls_mat[2] = -1.0*off_diag;
-    tls_mat[3] = -1.0*simData.asym; //dvr_right*(1.0*asym);
+    tls_mat[3] = dvr_right*simData.asym; //dvr_right*(1.0*asym);
 
     // system-bath matrix includes linear coupling plus
     // quadratic offset
@@ -198,8 +196,6 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
 
         right_sum += -1.0*modes[i].c*x*dvr_right +
             csquare*dvr_right*dvr_right/(2.0*mass*wsquare);
-
-        energy += 0.5*mass*wsquare*x*x;
     }
 
     // Removing energy term to see if this is
