@@ -154,7 +154,7 @@ void Propagator::ho_update_exact(Mode * mlist, double refState,
 void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
 {
     // copy off-diagonal from anharmonic code
-    const double off_diag = hbar*tls_freq;
+    const double offDiag = hbar*tls_freq;
 
     // store sums for diagonal matrix elements of H
     // left_sum for (0,0); right_sum for (1,1)
@@ -168,14 +168,19 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
     tls_mat.assign(matLen*matLen, 0.0);
     bath_mat.assign(matLen*matLen, 0.0);
 
+    std::vector<double> dvrVals;
+
+    dvrVals.push_back(dvr_left);
+    dvrVals.push_back(dvr_right);
+
     // system matrix is just splitting and any asymmetry
     // note that signs should be standard b/c I'm using
     // (-1,+1) instead of (+1,-1)
 
-    tls_mat[0] = dvr_left*simData.asym; //dvr_left*(1.0*asym);
-    tls_mat[1] = -1.0*off_diag;
-    tls_mat[2] = -1.0*off_diag;
-    tls_mat[3] = dvr_right*simData.asym; //dvr_right*(1.0*asym);
+    tls_mat[0] = dvrVals[0]*simData.asym; //dvr_left*(1.0*asym);
+    tls_mat[1] = -1.0*offDiag;
+    tls_mat[2] = -1.0*offDiag;
+    tls_mat[3] = dvrVals[1]*simData.asym; //dvr_right*(1.0*asym);
 
     // system-bath matrix includes linear coupling plus
     // quadratic offset
@@ -208,10 +213,15 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
 
     // total hamiltonian is sum of system and system-bath parts
 
-    ham[0] = tls_mat[0] + bath_mat[0];
-    ham[1] = tls_mat[1] + bath_mat[1];
-    ham[2] = tls_mat[2] + bath_mat[2];
-    ham[3] = tls_mat[3] + bath_mat[3];
+    for (int i = 0; i < matLen; i++)
+    {
+        for (int j = 0; j < matLen; j++)
+        {
+            int index = i*matLen+j;
+
+            ham[index] = tls_mat[index] + bath_mat[index];
+        }
+    }
 
 } // end build_ham()
 
