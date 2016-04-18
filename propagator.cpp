@@ -11,9 +11,11 @@ using namespace qcpiConstNS;
 
 Propagator::Propagator()
 {
-    prop.assign(DSTATES*DSTATES, 0.0);
-    ham.assign(DSTATES*DSTATES, 0.0);
-    ptemp.assign(DSTATES*DSTATES, 0.0);
+    matLen = DSTATES;
+
+    prop.assign(matLen*matLen, 0.0);
+    ham.assign(matLen*matLen, 0.0);
+    ptemp.assign(matLen*matLen, 0.0);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -22,14 +24,14 @@ void Propagator::update(Mode * refModes, double refState, SimInfo & simData)
 {
     // run unforced trajectory and integrate U(t)
 
-    for (int i = 0; i < DSTATES; i++)
+    for (int i = 0; i < matLen; i++)
     {
-        for (int j = 0; j < DSTATES; j++)
+        for (int j = 0; j < matLen; j++)
         {
             if (i == j)
-                prop[i*DSTATES+j] = 1.0;
+                prop[i*matLen+j] = 1.0;
             else
-                prop[i*DSTATES+j] = 0.0;
+                prop[i*matLen+j] = 0.0;
         }
     }
 
@@ -50,7 +52,7 @@ void Propagator::update(Mode * refModes, double refState, SimInfo & simData)
         // integrate TDSE for U(t) w/ piece-wise constant
         // Hamiltonian approx.
 
-        rkdriver(DSTATES*DSTATES, 0.0, simData.rhoDelta, simData.rhoSteps);
+        rkdriver(matLen*matLen, 0.0, simData.rhoDelta, simData.rhoSteps);
 
         // swap out true and temp pointers
 
@@ -64,8 +66,8 @@ void Propagator::update(Mode * refModes, double refState, SimInfo & simData)
 void Propagator::ho_update_exact(Mode * mlist, double refState, 
         SimInfo & simData)
 {
-    double del_t = simData.dt/2.0;
-    double chunk_dt = simData.dt/simData.chunks;
+    double delta = simData.dt/2.0;
+    double chunkDelta = simData.dt/simData.chunks;
 
     for (int mode = 0; mode < simData.bathModes; mode++)
     {
@@ -73,7 +75,9 @@ void Propagator::ho_update_exact(Mode * mlist, double refState,
         double p0, pt;
 
         double w = mlist[mode].omega;
-        double shift = (refState * mlist[mode].c)/(mass * w * w);
+        double c = mlist[mode].c;
+
+        double shift = (refState * c)/(mass * w * w);
 
         // first calculated x(t) at time points
         // for propagator integration
@@ -92,11 +96,11 @@ void Propagator::ho_update_exact(Mode * mlist, double refState,
         {
             // find x(t) at chunk time points
 
-            xt = (x0 - shift)*cos(w*chunk_dt) + 
-                (p0/(mass*w))*sin(w*chunk_dt) + shift;
+            xt = (x0 - shift)*cos(w*chunkDelta) + 
+                (p0/(mass*w))*sin(w*chunkDelta) + shift;
 
-            pt = p0*cos(w*chunk_dt) - 
-                mass*w*(x0 - shift)*sin(w*chunk_dt);
+            pt = p0*cos(w*chunkDelta) - 
+                mass*w*(x0 - shift)*sin(w*chunkDelta);
 
             mlist[mode].x_t.push_back(xt);
 
@@ -112,12 +116,12 @@ void Propagator::ho_update_exact(Mode * mlist, double refState,
         // calculate time-evolved x(t), p(t) for
         // first half-step of trajectory
 
-        xt = (x0 - shift)*cos(w*del_t) + (p0/(mass*w))*sin(w*del_t) + shift;
+        xt = (x0 - shift)*cos(w*delta) + (p0/(mass*w))*sin(w*delta) + shift;
 
-        pt = p0*cos(w*del_t) - mass*w*(x0 - shift)*sin(w*del_t);
+        pt = p0*cos(w*delta) - mass*w*(x0 - shift)*sin(w*delta);
 
-        mlist[mode].first_phase = (x0 - shift)*sin(w*del_t) - 
-            (p0/(mass*w))*(cos(w*del_t)-1.0) + shift*w*del_t;
+        mlist[mode].first_phase = (x0 - shift)*sin(w*delta) - 
+            (p0/(mass*w))*(cos(w*delta)-1.0) + shift*w*delta;
 
         // swap x0, p0 and xt, pt
 
@@ -127,12 +131,12 @@ void Propagator::ho_update_exact(Mode * mlist, double refState,
         // calculate time-evolved x(t), p(t) for
         // second half-step of trajectory
 
-        xt = (x0 - shift)*cos(w*del_t) + (p0/(mass*w))*sin(w*del_t) + shift;
+        xt = (x0 - shift)*cos(w*delta) + (p0/(mass*w))*sin(w*delta) + shift;
 
-        pt = p0*cos(w*del_t) - mass*w*(x0 - shift)*sin(w*del_t);
+        pt = p0*cos(w*delta) - mass*w*(x0 - shift)*sin(w*delta);
 
-        mlist[mode].second_phase = (x0 - shift)*sin(w*del_t) - 
-            (p0/(mass*w))*(cos(w*del_t)-1.0) + shift*w*del_t;
+        mlist[mode].second_phase = (x0 - shift)*sin(w*delta) - 
+            (p0/(mass*w))*(cos(w*delta)-1.0) + shift*w*delta;
 
         // update current phase space point
 

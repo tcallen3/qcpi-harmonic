@@ -12,6 +12,7 @@
 class Propagator
 {
     private:
+        int matLen;
         cvector ham;
         cvector ptemp;
 
