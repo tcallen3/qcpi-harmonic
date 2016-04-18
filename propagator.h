@@ -11,23 +11,25 @@
 
 class Propagator
 {
-    public:
-        cvector prop;
+    private:
         cvector ham;
         cvector ptemp;
-        vector<double> x0_free;
-        vector<double> p0_free;
 
-        Propagator();
-        void update(Mode * mlist, double ref_state, SimInfo & simData);
-
-        void ho_update_exact(Mode * mlist, double ref_state, 
+        void ho_update_exact(Mode * mlist, double refState, 
             SimInfo & simData);
         void build_ham(Mode * modes, int chunk, SimInfo & simData);
         void prop_eqns(double t, complex<double> * y, complex<double> * dydt);
         void rk4(complex<double> * y, complex<double> * dydx, int n, 
             double x, double h, complex<double> * yout);
         void rkdriver(int nvar, double x1, double x2, int nstep);
+
+    public:
+        cvector prop;
+        vector<double> xRef;
+        vector<double> pRef;
+
+        Propagator();
+        void update(Mode * mlist, double ref_state, SimInfo & simData);
 };
 
 #endif

@@ -61,7 +61,7 @@ void Propagator::update(Mode * refModes, double refState, SimInfo & simData)
 
 /* ------------------------------------------------------------------------- */
 
-void Propagator::ho_update_exact(Mode * mlist, double ref_state, 
+void Propagator::ho_update_exact(Mode * mlist, double refState, 
         SimInfo & simData)
 {
     double del_t = simData.dt/2.0;
@@ -73,7 +73,7 @@ void Propagator::ho_update_exact(Mode * mlist, double ref_state,
         double p0, pt;
 
         double w = mlist[mode].omega;
-        double shift = (ref_state * mlist[mode].c)/(mass * w * w);
+        double shift = (refState * mlist[mode].c)/(mass * w * w);
 
         // first calculated x(t) at time points
         // for propagator integration
@@ -85,8 +85,8 @@ void Propagator::ho_update_exact(Mode * mlist, double ref_state,
 
         // set up ICs for chunk calc
 
-        x0 = x0_free[mode];
-        p0 = p0_free[mode];
+        x0 = xRef[mode];
+        p0 = pRef[mode];
         
         for (int i = 0; i < simData.chunks; i++)
         {
@@ -106,8 +106,8 @@ void Propagator::ho_update_exact(Mode * mlist, double ref_state,
 
         // set up ICs for trajectory
 
-        x0 = x0_free[mode];
-        p0 = p0_free[mode];
+        x0 = xRef[mode];
+        p0 = pRef[mode];
 
         // calculate time-evolved x(t), p(t) for
         // first half-step of trajectory
@@ -136,8 +136,8 @@ void Propagator::ho_update_exact(Mode * mlist, double ref_state,
 
         // update current phase space point
 
-        x0_free[mode] = xt;
-        p0_free[mode] = pt;
+        xRef[mode] = xt;
+        pRef[mode] = pt;
 
     } // end mode loop
 }

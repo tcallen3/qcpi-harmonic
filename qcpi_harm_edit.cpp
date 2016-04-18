@@ -222,8 +222,8 @@ int main(int argc, char * argv[])
 
         // initialize propagator ICs
 
-        curr_prop.x0_free.assign(bath.xVals.begin(), bath.xVals.end());
-        curr_prop.p0_free.assign(bath.pVals.begin(), bath.pVals.end());
+        curr_prop.xRef.assign(bath.xVals.begin(), bath.xVals.end());
+        curr_prop.pRef.assign(bath.pVals.begin(), bath.pVals.end());
 
         // loop over first kmax time points
 
