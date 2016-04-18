@@ -156,11 +156,6 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
     // copy off-diagonal from anharmonic code
     const double offDiag = hbar*tls_freq;
 
-    // store sums for diagonal matrix elements of H
-    // left_sum for (0,0); right_sum for (1,1)
-    //double left_sum;
-    //double right_sum;
-
     // store system and system-bath coupling contributions separately
     std::vector<complex<double> > tls_mat;
     std::vector<complex<double> > bath_mat;
@@ -188,13 +183,7 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
         }
     }
 
-    // system-bath matrix includes linear coupling plus
-    // quadratic offset
-
-    // in this form, it also includes the bath potential energy
-
-    //left_sum = 0.0;
-    //right_sum = 0.0;
+    // system-bath matrix includes bi-linear coupling 
 
     std::vector<double> energies;
 
@@ -211,26 +200,11 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
             energies[index] += -1.0*modes[i].c*x*dvrVals[index] +
                 csquare*dvrVals[index]*dvrVals[index]/(2.0*mass*wsquare);
         }
-/*
-        left_sum += -1.0*modes[i].c*x*dvr_left +
-            csquare*dvr_left*dvr_left/(2.0*mass*wsquare);
-
-        right_sum += -1.0*modes[i].c*x*dvr_right +
-            csquare*dvr_right*dvr_right/(2.0*mass*wsquare);
-*/        
     }
-
-    // Removing energy term to see if this is
-    // dominating energy gap and causing issues
 
     for (int i = 0; i < matLen; i++)
         bath_mat[i*matLen+i] = energies[i];
-/*
-    bath_mat[0] = left_sum;
-    bath_mat[1] = 0.0;
-    bath_mat[2] = 0.0;
-    bath_mat[3] = right_sum;
-*/
+
     // total hamiltonian is sum of system and system-bath parts
 
     for (int i = 0; i < matLen; i++)
@@ -251,13 +225,27 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
 
 void Propagator::prop_eqns(double t, complex<double> * y, complex<double> * dydt)
 {
+    for (int i = 0; i < matLen; i++)
+    {
+        for (int j = 0; j < matLen; j++)
+        {
+            dydt[i*matLen+j] = 0.0;
+
+            for (int k = 0; k < matLen; k++)
+            {
+                dydt[i*matLen+j] += (-I/hbar)*ham[i*matLen+k]*y[k*matLen+j];
+            }
+        }
+    }
+
     // this is component version of i*hbar*(dU/dt) = H*U
     // could as write as traditional matrix multiplication
-
+/*
     dydt[0] = -(I/hbar)*(ham[0]*y[0] + ham[1]*y[2]);
     dydt[1] = -(I/hbar)*(ham[0]*y[1] + ham[1]*y[3]);
     dydt[2] = -(I/hbar)*(ham[2]*y[0] + ham[3]*y[2]);
     dydt[3] = -(I/hbar)*(ham[2]*y[1] + ham[3]*y[3]);
+*/
 }
 
 /* ------------------------------------------------------------------------ */
