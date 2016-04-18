@@ -138,7 +138,7 @@ int main(int argc, char * argv[])
     // allocate density matrix
 
     complex<double> ** rho_proc = new complex<double> * [simData.qmSteps];
-    complex<double> * rho_ic_proc = new complex<double> [simData.qmSteps];
+//    complex<double> * rho_ic_proc = new complex<double> [simData.qmSteps];
 
     for (int i = 0; i < simData.qmSteps; i++)
     {
@@ -191,9 +191,11 @@ int main(int argc, char * argv[])
     {
         // zero per-proc rho(t)
 
+        curr_prop.qiAmp.assign(simData.qmSteps, 0.0);
+/*
         for (int i = 0; i < simData.qmSteps; i++)
             rho_ic_proc[i] = 0.0;
-
+*/
         // generate ICs for HOs using MC walk (we use last step's
         // ICs as current step's IC seed)
 
@@ -259,7 +261,7 @@ int main(int argc, char * argv[])
 
             // select reference state for next timestep
 
-            curr_prop.pick_ref(rho_ic_proc, seg, gen);
+            curr_prop.pick_ref(seg, gen);
 
             curr_prop.update(ref_modes, simData);
 
@@ -303,7 +305,7 @@ int main(int argc, char * argv[])
                 rho_proc[seg][rindex] += pathList[path].product;
 
                 if (rindex == 0)
-                    rho_ic_proc[seg] += pathList[path].product;
+                    curr_prop.qiAmp[seg] += pathList[path].product;
 
             } // end path loop (full path phase)
 
@@ -352,7 +354,7 @@ int main(int argc, char * argv[])
             // using stochastically determined branching
             // and harmonic reference states
 
-            curr_prop.pick_ref(rho_ic_proc, seg, gen);
+            curr_prop.pick_ref(seg, gen);
 
             // choose branching kmax steps back
 
@@ -495,7 +497,7 @@ int main(int argc, char * argv[])
                 rho_proc[seg][rindex] += pathList[path].product;
 
                 if (rindex == 0)
-                    rho_ic_proc[seg] += pathList[path].product;
+                    curr_prop.qiAmp[seg] += pathList[path].product;
 
             } // end update loop (iter. phase)
 
@@ -607,7 +609,7 @@ int main(int argc, char * argv[])
     }
 
     delete [] rho_proc;
-    delete [] rho_ic_proc;
+//    delete [] rho_ic_proc;
     delete [] modes;
     delete [] ref_modes;
     delete [] rho_real_proc;

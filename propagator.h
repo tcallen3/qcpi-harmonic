@@ -15,6 +15,7 @@ class Propagator
         int matLen;
         cvector ham;
         cvector ptemp;
+        double refState;
 
         void ho_update_exact(Mode * mlist, SimInfo & simData);
         void build_ham(Mode * modes, int chunk, SimInfo & simData);
@@ -26,13 +27,13 @@ class Propagator
     public:
         cvector prop;
         std::vector<Ref> oldRefs;
-        double refState;
+        std::vector<complex<double> > qiAmp;
         vector<double> xRef;
         vector<double> pRef;
 
         explicit Propagator(int qmSteps);
         void update(Mode * mlist, SimInfo & simData);
-        void pick_ref(complex<double> * rho_ic_proc, int seg, gsl_rng * gen);
+        void pick_ref(int seg, gsl_rng * gen);
 };
 
 #endif

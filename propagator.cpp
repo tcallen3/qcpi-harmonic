@@ -23,7 +23,7 @@ Propagator::Propagator(int qmSteps)
 
 /* ------------------------------------------------------------------------- */
 
-void Propagator::pick_ref(complex<double> * rho_ic_proc, int seg, gsl_rng * gen)
+void Propagator::pick_ref(int seg, gsl_rng * gen)
 {
     double xi = gsl_rng_uniform(gen);
     double rhoVal;
@@ -31,7 +31,7 @@ void Propagator::pick_ref(complex<double> * rho_ic_proc, int seg, gsl_rng * gen)
     if ((seg-1) < 0)
         rhoVal = 1.0;
     else
-        rhoVal = rho_ic_proc[seg-1].real();
+        rhoVal = qiAmp[seg-1].real();
 
     if (xi < rhoVal)
     {
