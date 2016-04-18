@@ -158,8 +158,8 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
 
     // store sums for diagonal matrix elements of H
     // left_sum for (0,0); right_sum for (1,1)
-    double left_sum;
-    double right_sum;
+    //double left_sum;
+    //double right_sum;
 
     // store system and system-bath coupling contributions separately
     std::vector<complex<double> > tls_mat;
@@ -193,8 +193,12 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
 
     // in this form, it also includes the bath potential energy
 
-    left_sum = 0.0;
-    right_sum = 0.0;
+    //left_sum = 0.0;
+    //right_sum = 0.0;
+
+    std::vector<double> energies;
+
+    energies.assign(matLen, 0.0);
 
     for (int i = 0; i < simData.bathModes; i++)
     {
@@ -202,21 +206,31 @@ void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
         double wsquare = modes[i].omega*modes[i].omega;
         double x = modes[i].x_t[chunk];
 
+        for (int index = 0; index < matLen; index++)
+        {
+            energies[index] += -1.0*modes[i].c*x*dvrVals[index] +
+                csquare*dvrVals[index]*dvrVals[index]/(2.0*mass*wsquare);
+        }
+/*
         left_sum += -1.0*modes[i].c*x*dvr_left +
             csquare*dvr_left*dvr_left/(2.0*mass*wsquare);
 
         right_sum += -1.0*modes[i].c*x*dvr_right +
             csquare*dvr_right*dvr_right/(2.0*mass*wsquare);
+*/        
     }
 
     // Removing energy term to see if this is
     // dominating energy gap and causing issues
 
+    for (int i = 0; i < matLen; i++)
+        bath_mat[i*matLen+i] = energies[i];
+/*
     bath_mat[0] = left_sum;
     bath_mat[1] = 0.0;
     bath_mat[2] = 0.0;
     bath_mat[3] = right_sum;
-
+*/
     // total hamiltonian is sum of system and system-bath parts
 
     for (int i = 0; i < matLen; i++)
