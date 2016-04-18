@@ -238,14 +238,6 @@ void Propagator::prop_eqns(double t, complex<double> * y, complex<double> * dydt
         }
     }
 
-    // this is component version of i*hbar*(dU/dt) = H*U
-    // could as write as traditional matrix multiplication
-/*
-    dydt[0] = -(I/hbar)*(ham[0]*y[0] + ham[1]*y[2]);
-    dydt[1] = -(I/hbar)*(ham[0]*y[1] + ham[1]*y[3]);
-    dydt[2] = -(I/hbar)*(ham[2]*y[0] + ham[3]*y[2]);
-    dydt[3] = -(I/hbar)*(ham[2]*y[1] + ham[3]*y[3]);
-*/
 }
 
 /* ------------------------------------------------------------------------ */
