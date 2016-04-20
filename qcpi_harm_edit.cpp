@@ -33,9 +33,6 @@ using namespace qcpiConstNS;
 void qcpi_update_exact(Path &, Mode *, SimInfo &);
 double action_calc_exact(Path &, Mode *, Mode *, SimInfo &);
 
-// simple matrix multiply
-void mat_mul(complex<double> *, complex<double> *, complex<double> *, int);
-
 // mapping functions
 void map_paths(map<unsigned long long, unsigned> &, 
     vector<Path> &);
@@ -744,29 +741,6 @@ double action_calc_exact(Path & qm_path, Mode * mlist, Mode * reflist,
     } // end mode loop
 
     return action;
-}
-
-/* ------------------------------------------------------------------------ */
-
-// Find C = A * B for square complex matrices that are size x size
-// Note: takes matrices in linear array form
-
-void mat_mul(complex<double> * C, complex<double> * A, complex<double> * B,
-    int size)
-{
-    int i, j, k;
-
-    for (i = 0; i < size; i++)
-    {
-        for (j = 0; j < size; j++)
-        {
-            C[i*size + j] = 0.0;
-            for (k = 0; k < size; k++)
-            {
-                C[i*size + j] += A[i*size + k] * B[k*size + j];
-            }
-        }
-    }
 }
 
 /* ------------------------------------------------------------------------ */
