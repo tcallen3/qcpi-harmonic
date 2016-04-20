@@ -490,11 +490,16 @@ int main(int argc, char * argv[])
     // collect real and imag parts of rho into separate
     // arrays for MPI communication
 
-    double * rho_real_proc = new double [simData.qmSteps*DSTATES*DSTATES];
-    double * rho_imag_proc = new double [simData.qmSteps*DSTATES*DSTATES];
+    std::vector<double> rho_real_proc;
+    std::vector<double> rho_imag_proc;
 
-    double * rho_real = new double [simData.qmSteps*DSTATES*DSTATES];
-    double * rho_imag = new double [simData.qmSteps*DSTATES*DSTATES];
+    std::vector<double> rho_real;
+    std::vector<double> rho_imag;
+
+    rho_real_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rho_imag_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rho_real.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rho_imag.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
 
     for (int i = 0; i < simData.qmSteps; i++)
     {
@@ -502,18 +507,15 @@ int main(int argc, char * argv[])
         {
             rho_real_proc[i*DSTATES*DSTATES+j] = rho_proc[i*DSTATES*DSTATES+j].real();
             rho_imag_proc[i*DSTATES*DSTATES+j] = rho_proc[i*DSTATES*DSTATES+j].imag();
-
-            rho_real[i*DSTATES*DSTATES+j] = 0.0;
-            rho_imag[i*DSTATES*DSTATES+j] = 0.0;
         }
     }
 
     // Allreduce the real and imaginary arrays
 
-    MPI_Allreduce(rho_real_proc, rho_real, simData.qmSteps*DSTATES*DSTATES,
+    MPI_Allreduce(&rho_real_proc[0], &rho_real[0], simData.qmSteps*DSTATES*DSTATES,
         MPI_DOUBLE, MPI_SUM, w_comm);
 
-    MPI_Allreduce(rho_imag_proc, rho_imag, simData.qmSteps*DSTATES*DSTATES,
+    MPI_Allreduce(&rho_imag_proc[0], &rho_imag[0], simData.qmSteps*DSTATES*DSTATES,
         MPI_DOUBLE, MPI_SUM, w_comm);
 
     // scale arrays by Monte Carlo factor
@@ -577,10 +579,6 @@ int main(int argc, char * argv[])
 
     delete [] modes;
     delete [] ref_modes;
-    delete [] rho_real_proc;
-    delete [] rho_imag_proc;
-    delete [] rho_real;
-    delete [] rho_imag;
 
     MPI_Finalize();
 
