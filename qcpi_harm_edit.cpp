@@ -133,18 +133,10 @@ int main(int argc, char * argv[])
     // EDIT NOTES: (consider using small object/struct here)
 
     // allocate density matrix
+    
+    cvector rho_proc;
 
-    complex<double> ** rho_proc = new complex<double> * [simData.qmSteps];
-
-    for (int i = 0; i < simData.qmSteps; i++)
-    {
-        rho_proc[i] = new complex<double> [DSTATES*DSTATES];
-
-        for (int j = 0; j < DSTATES*DSTATES; j++)
-        {
-            rho_proc[i][j] = 0.0;
-        }
-    }
+    rho_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
 
     // initialize path vector
 
@@ -287,8 +279,8 @@ int main(int argc, char * argv[])
 
                 unsigned rindex = splus1*DSTATES + sminus1;
 
-                rho_proc[seg][rindex] += pathList[path].product;
-
+                rho_proc[seg*DSTATES*DSTATES + rindex] += pathList[path].product;
+                
                 if (rindex == 0)
                     curr_prop.qiAmp[seg] += pathList[path].product;
 
@@ -302,8 +294,7 @@ int main(int argc, char * argv[])
 
         // slide paths forward one step, i.e. (010) -> (10)
         // note that our system IC means we only
-        // have 1/4 of all paths, or this would
-        // need to be handled with full T matrix as below
+        // have 1/4 of all paths, or this would // need to be handled with full T matrix as below
 
         vector<unsigned> tPath;
 
@@ -475,7 +466,7 @@ int main(int argc, char * argv[])
 
                 unsigned rindex = splus1*DSTATES + sminus1;
 
-                rho_proc[seg][rindex] += pathList[path].product;
+                rho_proc[seg*DSTATES*DSTATES + rindex] += pathList[path].product;
 
                 if (rindex == 0)
                     curr_prop.qiAmp[seg] += pathList[path].product;
@@ -509,8 +500,8 @@ int main(int argc, char * argv[])
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
-            rho_real_proc[i*DSTATES*DSTATES+j] = rho_proc[i][j].real();
-            rho_imag_proc[i*DSTATES*DSTATES+j] = rho_proc[i][j].imag();
+            rho_real_proc[i*DSTATES*DSTATES+j] = rho_proc[i*DSTATES*DSTATES+j].real();
+            rho_imag_proc[i*DSTATES*DSTATES+j] = rho_proc[i*DSTATES*DSTATES+j].imag();
 
             rho_real[i*DSTATES*DSTATES+j] = 0.0;
             rho_imag[i*DSTATES*DSTATES+j] = 0.0;
@@ -584,12 +575,6 @@ int main(int argc, char * argv[])
 
     // cleanup
 
-    for (int i = 0; i < simData.qmSteps; i++)
-    {
-        delete [] rho_proc[i];
-    }
-
-    delete [] rho_proc;
     delete [] modes;
     delete [] ref_modes;
     delete [] rho_real_proc;
