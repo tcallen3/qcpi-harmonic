@@ -153,12 +153,6 @@ int main(int argc, char * argv[])
 
     Path pstart;
 
-    // EDIT NOTES: (change old_ref_list to queue type?)
-
-    // set up variables to store current and past reference state
-
-
-
     // initialize harmonic bath arrays
 
     Mode * modes = new Mode [simData.bathModes];
@@ -171,8 +165,6 @@ int main(int argc, char * argv[])
     }
 
     map<unsigned long long, unsigned> pathMap;
-
-    // set up variable to store current reference state
 
 
     // Following loops are the core computational ones
@@ -382,7 +374,6 @@ int main(int argc, char * argv[])
             for (unsigned path = 0; path < currSize; path++)
             {
                 complex<double> tensorProd;
-                complex<double> tensorEacp;
 
                 // loop over all pairs of fwd/bwd system states
                 // to generate next step element
@@ -428,9 +419,6 @@ int main(int argc, char * argv[])
 
                         tensorProd = curr_prop.prop[findex] * 
                             conj(curr_prop.prop[bindex]) * exp(I*phi);    
-
-                        tensorEacp = curr_prop.prop[findex] * 
-                            conj(curr_prop.prop[bindex]);
 
                         // add tensor result to correct path via index calcs
                         // note that this index comes from the last kmax 
