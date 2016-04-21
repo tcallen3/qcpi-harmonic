@@ -295,7 +295,7 @@ the function that will define the ODE equations, and the params array is
 included for extra flexibility, as per GSL */
 
 void Propagator::rk4(cvector & y, complex<double> * dydx, int n, double x, double h, 
-    complex<double> * yout)
+    cvector & yout)
 {
     int i;
     double h_mid, h_6;
@@ -344,40 +344,29 @@ it much, but it was part of the NR approach so it got rolled in here */
 
 void Propagator::rkdriver(int nvar, double x1, double x2, int nstep)
 {
-    int i, k;
     double x, h;
-    complex<double> *vout, *dv;
-    cvector v;
+    complex<double> *dv;
+    cvector v, vout;
 
-    vout = new complex<double>[nvar];
     dv = new complex<double>[nvar];
 
     v.assign(prop.begin(), prop.end());
+    vout.assign(matLen*matLen, 0.0);
 
     x = x1;
     h = (x2-x1)/nstep;
 
-    for (k = 1; k <= nstep; k++)
+    for (int k = 1; k <= nstep; k++)
     {
         prop_eqns(v, dv);
         rk4(v, dv, nvar, x, h, vout);
-        if ((double)(x+h) == x)
-        {
-            fprintf(stderr, "x: %8.5f\n", x);
-            fprintf(stderr, "h: %13.10f\n", h);
-            fflush(stderr);
-
-            throw std::runtime_error("Step size too small in rkdriver\n");
-        }
         x += h;
-        for (i = 0; i < nvar; i++)
-            v[i] = vout[i];
+
+        v.assign(vout.begin(), vout.end());
     }
 
-    for (i = 0; i < nvar; i++)
-        ptemp[i] = vout[i];
+    ptemp.assign(vout.begin(), vout.end());
 
-    delete [] vout;
     delete [] dv;
 }
 

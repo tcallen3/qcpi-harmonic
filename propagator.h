@@ -21,7 +21,7 @@ class Propagator
         void build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simData);
         void prop_eqns(cvector & y, complex<double> * dydt);
         void rk4(cvector & y, complex<double> * dydx, int n, 
-            double x, double h, complex<double> * yout);
+            double x, double h, cvector & yout);
         void rkdriver(int nvar, double x1, double x2, int nstep);
 
     public:
