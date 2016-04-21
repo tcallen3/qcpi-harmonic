@@ -30,8 +30,9 @@
 using namespace qcpiConstNS;
 
 // QCPI functions
-void qcpi_update_exact(Path &, Mode *, SimInfo &);
-double action_calc_exact(Path &, Mode *, Mode *, SimInfo &);
+void qcpi_update_exact(Path &, std::vector<Mode> &, SimInfo &);
+double action_calc_exact(Path &, std::vector<Mode> &, std::vector<Mode> &, 
+    SimInfo &);
 
 // mapping functions
 void map_paths(map<unsigned long long, unsigned> &, 
@@ -42,8 +43,7 @@ unsigned long long get_binary(vector<unsigned> &, vector<unsigned> &);
 int main(int argc, char * argv[])
 {
     // initialize MPI
-
-    MPI_Init(&argc, &argv);
+MPI_Init(&argc, &argv);
     MPI_Comm w_comm = MPI_COMM_WORLD;
 
     int me, nprocs;
@@ -150,13 +150,18 @@ int main(int argc, char * argv[])
 
     // initialize harmonic bath arrays
 
-    Mode * modes = new Mode [simData.bathModes];
-    Mode * ref_modes = new Mode [simData.bathModes];
+    std::vector<Mode> modes;
+    std::vector<Mode> ref_modes;
+
+    Mode currMode;
 
     for (int i = 0; i < simData.bathModes; i++)
     {
-        modes[i].omega = ref_modes[i].omega = bath.bathFreq[i];
-        modes[i].c = ref_modes[i].c = bath.bathCoup[i];
+        currMode.omega = bath.bathFreq[i];
+        currMode.c = bath.bathCoup[i];
+
+        modes.push_back(currMode);
+        ref_modes.push_back(currMode);
     }
 
     map<unsigned long long, unsigned> pathMap;
@@ -574,9 +579,6 @@ int main(int argc, char * argv[])
 
     // cleanup
 
-    delete [] modes;
-    delete [] ref_modes;
-
     MPI_Finalize();
 
     return 0;
@@ -584,7 +586,8 @@ int main(int argc, char * argv[])
 
 /* ------------------------------------------------------------------------ */
 
-void qcpi_update_exact(Path & qm_path, Mode * mlist, SimInfo & simData)
+void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist, 
+        SimInfo & simData)
 {
     double del_t = simData.dt/2.0;
     double dvr_vals[DSTATES] = {dvr_left, dvr_right};
@@ -662,8 +665,8 @@ void qcpi_update_exact(Path & qm_path, Mode * mlist, SimInfo & simData)
 
 /* ------------------------------------------------------------------------- */
 
-double action_calc_exact(Path & qm_path, Mode * mlist, Mode * reflist, 
-        SimInfo & simData)
+double action_calc_exact(Path & qm_path, std::vector<Mode> & mlist, 
+        std::vector<Mode> & reflist, SimInfo & simData)
 {
     double dvr_vals[DSTATES] = {dvr_left, dvr_right};
 

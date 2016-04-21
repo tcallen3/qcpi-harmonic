@@ -48,7 +48,7 @@ void Propagator::pick_ref(int seg, gsl_rng * gen)
 
 /* ------------------------------------------------------------------------- */
 
-void Propagator::update(Mode * refModes, SimInfo & simData)
+void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
 {
     // run unforced trajectory and integrate U(t)
 
@@ -91,7 +91,7 @@ void Propagator::update(Mode * refModes, SimInfo & simData)
 
 /* ------------------------------------------------------------------------- */
 
-void Propagator::ho_update_exact(Mode * mlist, SimInfo & simData)
+void Propagator::ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData)
 {
     double delta = simData.dt/2.0;
     double chunkDelta = simData.dt/simData.chunks;
@@ -178,7 +178,7 @@ void Propagator::ho_update_exact(Mode * mlist, SimInfo & simData)
 // construct system-bath Hamiltonian for
 // current timestep
 
-void Propagator::build_ham(Mode * modes, int chunk, SimInfo & simData)
+void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simData)
 {
     // copy off-diagonal from anharmonic code
     const double offDiag = hbar*tls_freq;
