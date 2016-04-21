@@ -20,8 +20,7 @@ class Propagator
         void ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData);
         void build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simData);
         void prop_eqns(cvector & y, cvector & dydt);
-        void rk4(cvector & y, cvector & dydx, int n, 
-            double h, cvector & yout);
+        void rk4(cvector & y, cvector & dydx, double h, cvector & yout);
         void rkdriver(int nvar, double x1, double x2, int nstep);
 
     public:

@@ -294,7 +294,7 @@ robust complex libraries are hard to find. The derivs fn pointer specifies
 the function that will define the ODE equations, and the params array is
 included for extra flexibility, as per GSL */
 
-void Propagator::rk4(cvector & y, cvector & dydx, int n, double h, 
+void Propagator::rk4(cvector & y, cvector & dydx, double h, 
     cvector & yout)
 {
     double h_mid, h_6;
@@ -351,7 +351,7 @@ void Propagator::rkdriver(int nvar, double x1, double x2, int nstep)
     for (int k = 1; k <= nstep; k++)
     {
         prop_eqns(v, dv);
-        rk4(v, dv, nvar, h, vout);
+        rk4(v, dv, h, vout);
 
         v.assign(vout.begin(), vout.end());
     }
