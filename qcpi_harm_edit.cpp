@@ -106,7 +106,6 @@ int main(int argc, char * argv[])
     if (simData.icTotal < nprocs)
         throw std::runtime_error("Too few ICs for processor group\n");
 
-    int my_ics = simData.icTotal/nprocs;
 
     // initialize RNG
 
@@ -145,6 +144,10 @@ int main(int argc, char * argv[])
 
     Path pstart;
 
+    pstart.fwd_path.push_back(0);   // left-localized
+    pstart.bwd_path.push_back(0);   // left-localized
+    pstart.product = 1.0;
+
     // initialize harmonic bath arrays
 
     Mode * modes = new Mode [simData.bathModes];
@@ -158,6 +161,7 @@ int main(int argc, char * argv[])
 
     map<unsigned long long, unsigned> pathMap;
 
+    int my_ics = simData.icTotal/nprocs;
 
     // Following loops are the core computational ones
 
@@ -185,12 +189,7 @@ int main(int argc, char * argv[])
         pathList.clear();
         pathMap.clear();
         tempList.clear();
-        pstart.fwd_path.clear();
-        pstart.bwd_path.clear();
 
-        pstart.fwd_path.push_back(0);   // left-localized
-        pstart.bwd_path.push_back(0);   // left-localized
-        pstart.product = 1.0;
         pstart.x0.assign(bath.xVals.begin(), bath.xVals.end());
         pstart.p0.assign(bath.pVals.begin(), bath.pVals.end());
 
@@ -253,7 +252,7 @@ int main(int argc, char * argv[])
 
                 // use integration points to find new phase contribution
 
-                double phi;
+                double phi = 0.0;
 
                 phi = action_calc_exact(pathList[path], modes, ref_modes, simData);
 
@@ -350,9 +349,7 @@ int main(int argc, char * argv[])
             tempList = pathList;
 
             for (unsigned tp = 0; tp < tempList.size(); tp++)
-            {
                 tempList[tp].product = 0.0;
-            }
 
             // loop over paths to construct tensor contributions
             // in this loop, path variable indexes the input path array
