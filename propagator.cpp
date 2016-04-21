@@ -308,8 +308,8 @@ void Propagator::rk4(cvector & y, cvector & dydx, int n, double h,
     h_mid = 0.5*h;
     h_6 = h/6.0;
 
-    for (i = 0; i < n; i++)
-        yt[i] = y[i] + h_mid*dydx[i];    /* first step */
+    for (unsigned j = 0; j < yt.size(); j++)
+        yt[j] = y[j] + h_mid*dydx[j];    /* first step */
     
     prop_eqns(yt, dyt);        /* second step */
     
