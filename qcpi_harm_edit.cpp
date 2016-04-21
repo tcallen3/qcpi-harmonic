@@ -34,6 +34,9 @@ void qcpi_update_exact(Path &, std::vector<Mode> &, SimInfo &);
 double action_calc_exact(Path &, std::vector<Mode> &, std::vector<Mode> &, 
     SimInfo &);
 
+void sum_paths(std::vector<Path> & pathList, cvector & rho, 
+        Propagator & curr_prop, int step);
+
 // mapping functions
 void map_paths(map<unsigned long long, unsigned> &, 
     vector<Path> &);
@@ -258,40 +261,15 @@ MPI_Init(&argc, &argv);
 
                 // EDIT NOTES: (block this into function)
                 // calculate proper rho contribution
-/*
-                unsigned size = pathList[path].fwd_path.size();
-    
-                unsigned splus0 = pathList[path].fwd_path[size-2];
-                unsigned splus1 = pathList[path].fwd_path[size-1];
 
-                unsigned sminus0 = pathList[path].bwd_path[size-2];
-                unsigned sminus1 = pathList[path].bwd_path[size-1];
-                
-                unsigned findex = splus1*DSTATES + splus0;
-                unsigned bindex = sminus1*DSTATES + sminus0;
-*/
                 complex<double> kernelAmp = 
                     curr_prop.get_kernel_prod(pathList[path]);
 
                 pathList[path].product *= kernelAmp * exp(I*phi);
 
-                //pathList[path].product *= curr_prop.prop[findex] * 
-                    //conj(curr_prop.prop[bindex]) * exp(I*phi);
-
-                // EDIT NOTES: (block into function)
-                // pull out density matrix at each time point
-
-                unsigned size = pathList[path].fwd_path.size();
-                unsigned splus1 = pathList[path].fwd_path[size-1];
-                unsigned sminus1 = pathList[path].bwd_path[size-1];
-                unsigned rindex = splus1*DSTATES + sminus1;
-
-                rho_proc[seg*DSTATES*DSTATES + rindex] += pathList[path].product;
-                
-                if (rindex == 0)
-                    curr_prop.qiAmp[seg] += pathList[path].product;
-
             } // end path loop (full path phase)
+
+            sum_paths(pathList, rho_proc, curr_prop, seg);
 
             tempList.clear();
 
@@ -398,28 +376,12 @@ MPI_Init(&argc, &argv);
 
                         phi = action_calc_exact(temp, modes, ref_modes, simData);
 
-                        // calculate proper rho contribution
-/*
-                        unsigned size = temp.fwd_path.size();
-    
-                        unsigned splus0 = temp.fwd_path[size-2];
-                        unsigned splus1 = temp.fwd_path[size-1];
-
-                        unsigned sminus0 = temp.bwd_path[size-2];
-                        unsigned sminus1 = temp.bwd_path[size-1];
-                
-                        unsigned findex = splus1*DSTATES + splus0;
-                        unsigned bindex = sminus1*DSTATES + sminus0;
-*/
                         // evaluate tensor element
 
                         complex<double> kernelAmp = 
                             curr_prop.get_kernel_prod(temp);
 
                         tensorProd = kernelAmp * exp(I*phi);
-
-                        //tensorProd = curr_prop.prop[findex] * 
-                            //conj(curr_prop.prop[bindex]) * exp(I*phi);    
 
                         // add tensor result to correct path via index calcs
                         // note that this index comes from the last kmax 
@@ -468,20 +430,7 @@ MPI_Init(&argc, &argv);
 
             // pull out current density matrix
 
-            for (unsigned path = 0; path < pathList.size(); path++)
-            {
-                unsigned size = pathList[path].fwd_path.size();
-                unsigned splus1 = pathList[path].fwd_path[size-1];
-                unsigned sminus1 = pathList[path].bwd_path[size-1];
-
-                unsigned rindex = splus1*DSTATES + sminus1;
-
-                rho_proc[seg*DSTATES*DSTATES + rindex] += pathList[path].product;
-
-                if (rindex == 0)
-                    curr_prop.qiAmp[seg] += pathList[path].product;
-
-            } // end update loop (iter. phase)
+            sum_paths(pathList, rho_proc, curr_prop, seg);
 
         } // end seg loop (iter. phase)
 
@@ -720,6 +669,32 @@ double action_calc_exact(Path & qm_path, std::vector<Mode> & mlist,
     } // end mode loop
 
     return action;
+}
+
+/* ------------------------------------------------------------------------ */
+
+void sum_paths(std::vector<Path> & pathList, cvector & rho, 
+        Propagator & curr_prop, int step)
+{
+    if (pathList.begin() == pathList.end())
+        return;
+
+    unsigned size = pathList[0].fwd_path.size();
+
+    for (unsigned path = 0; path < pathList.size(); path++)
+    {
+        unsigned splus1 = pathList[path].fwd_path[size-1];
+        unsigned sminus1 = pathList[path].bwd_path[size-1];
+
+        unsigned rindex = splus1*DSTATES + sminus1;
+
+        rho[step*DSTATES*DSTATES + rindex] += pathList[path].product;
+
+        if (rindex == 0)
+            curr_prop.qiAmp[step] += pathList[path].product;
+
+    }
+
 }
 
 /* ------------------------------------------------------------------------ */
