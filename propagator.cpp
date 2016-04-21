@@ -99,7 +99,7 @@ void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
         // integrate TDSE for U(t) w/ piece-wise constant
         // Hamiltonian approx.
 
-        rkdriver(matLen*matLen, 0.0, simData.rhoDelta, simData.rhoSteps);
+        rkdriver(0.0, simData.rhoDelta, simData.rhoSteps);
 
         // swap out true and temp pointers
 
@@ -337,7 +337,7 @@ run using more or less the same input, it initializes some things and
 then simply calls the underlying function in a loop; we don't really use
 it much, but it was part of the NR approach so it got rolled in here */
 
-void Propagator::rkdriver(int nvar, double x1, double x2, int nstep)
+void Propagator::rkdriver(double x1, double x2, int nstep)
 {
     double h;
     cvector v, vout, dv;
