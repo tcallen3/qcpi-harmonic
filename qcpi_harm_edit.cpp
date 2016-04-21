@@ -43,6 +43,11 @@ void map_paths(map<unsigned long long, unsigned> &,
 unsigned long long get_binary(Path &);
 unsigned long long get_binary(vector<unsigned> &, vector<unsigned> &);
 
+void global_mc_reduce(cvector & rho_local, cvector & rho_global, 
+        SimInfo & simData, MPI_Comm w_comm);
+void print_results(FILE * outfile, SimInfo & simData, cvector & global_rho,
+        std::string config_file, double g_runtime, int nprocs);
+
 int main(int argc, char * argv[])
 {
     // initialize MPI
@@ -444,95 +449,17 @@ MPI_Init(&argc, &argv);
     MPI_Allreduce(&local_time, &g_runtime, 1, MPI_DOUBLE,
         MPI_MAX, w_comm);
 
-    // EDIT NOTES: (chunk MPI reduction into new functions)
+    cvector global_rho;
 
-    // collect real and imag parts of rho into separate
-    // arrays for MPI communication
+    global_rho.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
 
-    std::vector<double> rho_real_proc;
-    std::vector<double> rho_imag_proc;
-
-    std::vector<double> rho_real;
-    std::vector<double> rho_imag;
-
-    rho_real_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
-    rho_imag_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
-    rho_real.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
-    rho_imag.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
-
-    for (int i = 0; i < simData.qmSteps; i++)
-    {
-        for (int j = 0; j < DSTATES*DSTATES; j++)
-        {
-            rho_real_proc[i*DSTATES*DSTATES+j] = rho_proc[i*DSTATES*DSTATES+j].real();
-            rho_imag_proc[i*DSTATES*DSTATES+j] = rho_proc[i*DSTATES*DSTATES+j].imag();
-        }
-    }
-
-    // Allreduce the real and imaginary arrays
-
-    MPI_Allreduce(&rho_real_proc[0], &rho_real[0], simData.qmSteps*DSTATES*DSTATES,
-        MPI_DOUBLE, MPI_SUM, w_comm);
-
-    MPI_Allreduce(&rho_imag_proc[0], &rho_imag[0], simData.qmSteps*DSTATES*DSTATES,
-        MPI_DOUBLE, MPI_SUM, w_comm);
-
-    // scale arrays by Monte Carlo factor
-
-    for (int i = 0; i < simData.qmSteps; i++)
-    {
-        for (int j = 0; j < DSTATES*DSTATES; j++)
-        {
-            rho_real[i*DSTATES*DSTATES+j] /= simData.icTotal;
-            rho_imag[i*DSTATES*DSTATES+j] /= simData.icTotal;
-        }
-    }
+    global_mc_reduce(rho_proc, global_rho, simData, w_comm);
 
     // output summary
 
-      if (me == 0)
-      {
-        int repeat = 50;
-        
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\nSimulation Summary\n");
-
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\n\n");
-
-        fprintf(outfile, "Processors: %d\n", nprocs);
-        fprintf(outfile, "Total simulation time: %.3f min\n", g_runtime/60.0);
-        fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
-
-        simData.print(outfile, repeat);
-
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\nDensity Matrix Values\n");
-
-        for (int i = 0; i < repeat; i++)
-            fprintf(outfile, "-");
-
-        fprintf(outfile, "\n\n");
-
-       
-            for (int i = 0; i < simData.qmSteps; i++)
-            {
-                int entry = i*DSTATES*DSTATES;
-
-                fprintf(outfile, "%7.4f %8.5f %6.3f (Tr = %13.10f)\n", (i+1)*simData.dt, 
-                    rho_real[entry], 0.0, rho_real[entry]+rho_real[entry+3]);
-            }
-
-
-        fprintf(outfile, "\n");
-
-      } // end output conditional
+    if (me == 0)
+        print_results(outfile, simData, global_rho, config_file,
+            g_runtime, nprocs);
 
     // cleanup
 
@@ -794,6 +721,112 @@ unsigned long long get_binary(vector<unsigned> & fwd, vector<unsigned> & bwd)
     }
 
     return sum;
+}
+
+/* ------------------------------------------------------------------------ */
+
+void global_mc_reduce(cvector & rho_local, cvector & rho_global, 
+        SimInfo & simData, MPI_Comm w_comm)
+{
+    std::vector<double> rho_real_proc;
+    std::vector<double> rho_imag_proc;
+
+    std::vector<double> rho_real;
+    std::vector<double> rho_imag;
+
+    rho_real_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rho_imag_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rho_real.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rho_imag.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+
+    for (int i = 0; i < simData.qmSteps; i++)
+    {
+        for (int j = 0; j < DSTATES*DSTATES; j++)
+        {
+            rho_real_proc[i*DSTATES*DSTATES+j] = rho_local[i*DSTATES*DSTATES+j].real();
+            rho_imag_proc[i*DSTATES*DSTATES+j] = rho_local[i*DSTATES*DSTATES+j].imag();
+        }
+    }
+
+    // Allreduce the real and imaginary arrays
+
+    MPI_Allreduce(&rho_real_proc[0], &rho_real[0], simData.qmSteps*DSTATES*DSTATES,
+        MPI_DOUBLE, MPI_SUM, w_comm);
+
+    MPI_Allreduce(&rho_imag_proc[0], &rho_imag[0], simData.qmSteps*DSTATES*DSTATES,
+        MPI_DOUBLE, MPI_SUM, w_comm);
+
+    // scale arrays by Monte Carlo factor
+
+    for (int i = 0; i < simData.qmSteps; i++)
+    {
+        for (int j = 0; j < DSTATES*DSTATES; j++)
+        {
+            rho_real[i*DSTATES*DSTATES+j] /= simData.icTotal;
+            rho_imag[i*DSTATES*DSTATES+j] /= simData.icTotal;
+        }
+    }
+
+    // reassign to complex output
+
+    for (int i = 0; i < simData.qmSteps; i++)
+    {
+        for (int j = 0; j < DSTATES*DSTATES; j++)
+        {
+            int index = i*DSTATES*DSTATES + j;
+
+            rho_global[index] = rho_real[index] + I*rho_imag[index];
+        }
+    }
+
+}
+
+/* ------------------------------------------------------------------------ */
+
+void print_results(FILE * outfile, SimInfo & simData, cvector & global_rho,
+        std::string config_file, double g_runtime, int nprocs)
+{
+        int repeat = 50;
+        
+        for (int i = 0; i < repeat; i++)
+            fprintf(outfile, "-");
+
+        fprintf(outfile, "\nSimulation Summary\n");
+
+        for (int i = 0; i < repeat; i++)
+            fprintf(outfile, "-");
+
+        fprintf(outfile, "\n\n");
+
+        fprintf(outfile, "Processors: %d\n", nprocs);
+        fprintf(outfile, "Total simulation time: %.3f min\n", g_runtime/60.0);
+        fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
+
+        simData.print(outfile, repeat);
+
+        for (int i = 0; i < repeat; i++)
+            fprintf(outfile, "-");
+
+        fprintf(outfile, "\nDensity Matrix Values\n");
+
+        for (int i = 0; i < repeat; i++)
+            fprintf(outfile, "-");
+
+        fprintf(outfile, "\n\n");
+
+       
+            for (int i = 0; i < simData.qmSteps; i++)
+            {
+                int entry = i*DSTATES*DSTATES;
+                double trace = global_rho[entry].real()+global_rho[entry+3].real(); 
+
+                fprintf(outfile, "%7.4f %8.5f %6.3f (Tr = %13.10f)\n", (i+1)*simData.dt, 
+                    global_rho[entry].real(), 0.0, trace);
+            }
+
+
+        fprintf(outfile, "\n");
+
 }
 
 /* ------------------------------------------------------------------------ */
