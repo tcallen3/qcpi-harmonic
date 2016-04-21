@@ -269,14 +269,14 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
 
 // propagator evolution
 
-void Propagator::prop_eqns(cvector & y, complex<double> * dydt)
+void Propagator::prop_eqns(cvector & y, cvector & dydt)
 {
+    dydt.assign(matLen*matLen, 0.0);
+
     for (int i = 0; i < matLen; i++)
     {
         for (int j = 0; j < matLen; j++)
         {
-            dydt[i*matLen+j] = 0.0;
-
             for (int k = 0; k < matLen; k++)
             {
                 dydt[i*matLen+j] += (-I/hbar)*ham[i*matLen+k]*y[k*matLen+j];
@@ -294,18 +294,16 @@ robust complex libraries are hard to find. The derivs fn pointer specifies
 the function that will define the ODE equations, and the params array is
 included for extra flexibility, as per GSL */
 
-void Propagator::rk4(cvector & y, complex<double> * dydx, int n, double x, double h, 
+void Propagator::rk4(cvector & y, cvector & dydx, int n, double x, double h, 
     cvector & yout)
 {
     int i;
     double h_mid, h_6;
-    complex<double> *dym, *dyt;
-    cvector yt;
-
-    dym = new complex<double>[n];
-    dyt = new complex<double>[n];
+    cvector yt, dyt, dym;
 
     yt.assign(n, 0.0);
+    dyt.assign(n, 0.0);
+    dym.assign(n, 0.0);
 
     h_mid = 0.5*h;
     h_6 = h/6.0;
@@ -331,8 +329,6 @@ void Propagator::rk4(cvector & y, complex<double> * dydx, int n, double x, doubl
     for (i = 0; i < n; i++)
         yout[i] = y[i] + h_6*(dydx[i] + dyt[i] + 2.0*dym[i]);
 
-    delete [] dym;
-    delete [] dyt; 
 }
 
 /* ------------------------------------------------------------------------ */
@@ -345,13 +341,11 @@ it much, but it was part of the NR approach so it got rolled in here */
 void Propagator::rkdriver(int nvar, double x1, double x2, int nstep)
 {
     double x, h;
-    complex<double> *dv;
-    cvector v, vout;
-
-    dv = new complex<double>[nvar];
+    cvector v, vout, dv;
 
     v.assign(prop.begin(), prop.end());
     vout.assign(matLen*matLen, 0.0);
+    dv.assign(matLen*matLen, 0.0);
 
     x = x1;
     h = (x2-x1)/nstep;
@@ -366,8 +360,6 @@ void Propagator::rkdriver(int nvar, double x1, double x2, int nstep)
     }
 
     ptemp.assign(vout.begin(), vout.end());
-
-    delete [] dv;
 }
 
 /* ------------------------------------------------------------------------ */
