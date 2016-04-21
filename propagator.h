@@ -34,6 +34,7 @@ class Propagator
         explicit Propagator(int qmSteps);
         void update(std::vector<Mode> & mlist, SimInfo & simData);
         void pick_ref(int seg, gsl_rng * gen);
+        complex<double> get_kernel_prod(const Path & path);
 };
 
 #endif

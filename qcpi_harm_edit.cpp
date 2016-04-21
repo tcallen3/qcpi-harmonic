@@ -258,7 +258,7 @@ MPI_Init(&argc, &argv);
 
                 // EDIT NOTES: (block this into function)
                 // calculate proper rho contribution
-
+/*
                 unsigned size = pathList[path].fwd_path.size();
     
                 unsigned splus0 = pathList[path].fwd_path[size-2];
@@ -269,13 +269,21 @@ MPI_Init(&argc, &argv);
                 
                 unsigned findex = splus1*DSTATES + splus0;
                 unsigned bindex = sminus1*DSTATES + sminus0;
+*/
+                complex<double> kernelAmp = 
+                    curr_prop.get_kernel_prod(pathList[path]);
 
-                pathList[path].product *= curr_prop.prop[findex] * 
-                    conj(curr_prop.prop[bindex]) * exp(I*phi);
+                pathList[path].product *= kernelAmp * exp(I*phi);
+
+                //pathList[path].product *= curr_prop.prop[findex] * 
+                    //conj(curr_prop.prop[bindex]) * exp(I*phi);
 
                 // EDIT NOTES: (block into function)
                 // pull out density matrix at each time point
 
+                unsigned size = pathList[path].fwd_path.size();
+                unsigned splus1 = pathList[path].fwd_path[size-1];
+                unsigned sminus1 = pathList[path].bwd_path[size-1];
                 unsigned rindex = splus1*DSTATES + sminus1;
 
                 rho_proc[seg*DSTATES*DSTATES + rindex] += pathList[path].product;
@@ -391,7 +399,7 @@ MPI_Init(&argc, &argv);
                         phi = action_calc_exact(temp, modes, ref_modes, simData);
 
                         // calculate proper rho contribution
-
+/*
                         unsigned size = temp.fwd_path.size();
     
                         unsigned splus0 = temp.fwd_path[size-2];
@@ -402,11 +410,16 @@ MPI_Init(&argc, &argv);
                 
                         unsigned findex = splus1*DSTATES + splus0;
                         unsigned bindex = sminus1*DSTATES + sminus0;
-
+*/
                         // evaluate tensor element
 
-                        tensorProd = curr_prop.prop[findex] * 
-                            conj(curr_prop.prop[bindex]) * exp(I*phi);    
+                        complex<double> kernelAmp = 
+                            curr_prop.get_kernel_prod(temp);
+
+                        tensorProd = kernelAmp * exp(I*phi);
+
+                        //tensorProd = curr_prop.prop[findex] * 
+                            //conj(curr_prop.prop[bindex]) * exp(I*phi);    
 
                         // add tensor result to correct path via index calcs
                         // note that this index comes from the last kmax 

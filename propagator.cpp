@@ -48,6 +48,25 @@ void Propagator::pick_ref(int seg, gsl_rng * gen)
 
 /* ------------------------------------------------------------------------- */
 
+complex<double> Propagator::get_kernel_prod(const Path & path)
+{
+    unsigned size = path.fwd_path.size();
+    
+    unsigned splus0 = path.fwd_path[size-2];
+    unsigned splus1 = path.fwd_path[size-1];
+
+    unsigned findex = splus1*DSTATES + splus0;
+
+    unsigned sminus0 = path.bwd_path[size-2];
+    unsigned sminus1 = path.bwd_path[size-1];
+                
+    unsigned bindex = sminus1*DSTATES + sminus0;
+
+    return prop[findex]*conj(prop[bindex]);
+}
+
+/* ------------------------------------------------------------------------- */
+
 void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
 {
     // run unforced trajectory and integrate U(t)
