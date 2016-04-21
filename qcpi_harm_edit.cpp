@@ -220,16 +220,11 @@ MPI_Init(&argc, &argv);
                 {
                     for (int bwd = 0; bwd < DSTATES; bwd++)
                     {
-                        Path * incr_path = new Path;
-                        (*incr_path) = temp;
-                        incr_path->fwd_path.push_back(fwd);
-                        incr_path->bwd_path.push_back(bwd);
-                
-                        tempList.push_back(*incr_path);
+                        Path incr_path(temp);
+                        incr_path.fwd_path.push_back(fwd);
+                        incr_path.bwd_path.push_back(bwd);
 
-                        // free allocation to save memory
-            
-                        delete incr_path;
+                        tempList.push_back(incr_path);
                     }
                 }
             }
