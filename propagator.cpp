@@ -269,7 +269,7 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
 
 // propagator evolution
 
-void Propagator::prop_eqns(double t, complex<double> * y, complex<double> * dydt)
+void Propagator::prop_eqns(cvector & y, complex<double> * dydt)
 {
     for (int i = 0; i < matLen; i++)
     {
@@ -294,30 +294,31 @@ robust complex libraries are hard to find. The derivs fn pointer specifies
 the function that will define the ODE equations, and the params array is
 included for extra flexibility, as per GSL */
 
-void Propagator::rk4(complex<double> * y, complex<double> * dydx, int n, double x, double h, 
+void Propagator::rk4(cvector & y, complex<double> * dydx, int n, double x, double h, 
     complex<double> * yout)
 {
     int i;
-    double xh, h_mid, h_6;
-    complex<double> *dym, *dyt, *yt;
+    double h_mid, h_6;
+    complex<double> *dym, *dyt;
+    cvector yt;
 
     dym = new complex<double>[n];
     dyt = new complex<double>[n];
-    yt = new complex<double>[n];
+
+    yt.assign(n, 0.0);
 
     h_mid = 0.5*h;
     h_6 = h/6.0;
-    xh = x+h_mid;
 
     for (i = 0; i < n; i++)
         yt[i] = y[i] + h_mid*dydx[i];    /* first step */
     
-    prop_eqns(xh, yt, dyt);        /* second step */
+    prop_eqns(yt, dyt);        /* second step */
     
     for (i = 0; i < n; i++)
         yt[i] = y[i] + h_mid*dyt[i];    
 
-    prop_eqns(xh, yt, dym);        /* third step */
+    prop_eqns(yt, dym);        /* third step */
 
     for (i = 0; i < n; i++)
     {
@@ -325,14 +326,13 @@ void Propagator::rk4(complex<double> * y, complex<double> * dydx, int n, double 
         dym[i] += dyt[i];
     }
     
-    prop_eqns(x+h, yt, dyt);    /* fourth step */
+    prop_eqns(yt, dyt);    /* fourth step */
 
     for (i = 0; i < n; i++)
         yout[i] = y[i] + h_6*(dydx[i] + dyt[i] + 2.0*dym[i]);
 
     delete [] dym;
     delete [] dyt; 
-    delete [] yt;    
 }
 
 /* ------------------------------------------------------------------------ */
@@ -346,21 +346,20 @@ void Propagator::rkdriver(int nvar, double x1, double x2, int nstep)
 {
     int i, k;
     double x, h;
-    complex<double> *v, *vout, *dv;
+    complex<double> *vout, *dv;
+    cvector v;
 
-    v = new complex<double>[nvar]; 
     vout = new complex<double>[nvar];
     dv = new complex<double>[nvar];
 
-    for (i = 0; i < nvar; i++)
-        v[i] = prop[i];    /* initialize vector */
+    v.assign(prop.begin(), prop.end());
 
     x = x1;
     h = (x2-x1)/nstep;
 
     for (k = 1; k <= nstep; k++)
     {
-        prop_eqns(x, v, dv);
+        prop_eqns(v, dv);
         rk4(v, dv, nvar, x, h, vout);
         if ((double)(x+h) == x)
         {
@@ -378,7 +377,6 @@ void Propagator::rkdriver(int nvar, double x1, double x2, int nstep)
     for (i = 0; i < nvar; i++)
         ptemp[i] = vout[i];
 
-    delete [] v;
     delete [] vout;
     delete [] dv;
 }
