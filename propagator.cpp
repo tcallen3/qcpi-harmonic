@@ -301,9 +301,9 @@ void Propagator::rk4(cvector & y, cvector & dydx, int n, double h,
     double h_mid, h_6;
     cvector yt, dyt, dym;
 
-    yt.assign(n, 0.0);
-    dyt.assign(n, 0.0);
-    dym.assign(n, 0.0);
+    yt.assign(matLen*matLen, 0.0);
+    dyt.assign(matLen*matLen, 0.0);
+    dym.assign(matLen*matLen, 0.0);
 
     h_mid = 0.5*h;
     h_6 = h/6.0;
