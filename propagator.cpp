@@ -297,7 +297,6 @@ included for extra flexibility, as per GSL */
 void Propagator::rk4(cvector & y, cvector & dydx, int n, double h, 
     cvector & yout)
 {
-    int i;
     double h_mid, h_6;
     cvector yt, dyt, dym;
 
@@ -308,17 +307,17 @@ void Propagator::rk4(cvector & y, cvector & dydx, int n, double h,
     h_mid = 0.5*h;
     h_6 = h/6.0;
 
-    for (unsigned j = 0; j < yt.size(); j++)
-        yt[j] = y[j] + h_mid*dydx[j];    /* first step */
+    for (unsigned i = 0; i < yt.size(); i++)
+        yt[i] = y[i] + h_mid*dydx[i];    /* first step */
     
     prop_eqns(yt, dyt);        /* second step */
     
-    for (i = 0; i < n; i++)
+    for (unsigned i = 0; i < yt.size(); i++)
         yt[i] = y[i] + h_mid*dyt[i];    
 
     prop_eqns(yt, dym);        /* third step */
 
-    for (i = 0; i < n; i++)
+    for (unsigned i = 0; i < yt.size(); i++)
     {
         yt[i] = y[i] + h*dym[i];
         dym[i] += dyt[i];
@@ -326,7 +325,7 @@ void Propagator::rk4(cvector & y, cvector & dydx, int n, double h,
     
     prop_eqns(yt, dyt);    /* fourth step */
 
-    for (i = 0; i < n; i++)
+    for (unsigned i = 0; i < dyt.size(); i++)
         yout[i] = y[i] + h_6*(dydx[i] + dyt[i] + 2.0*dym[i]);
 
 }
