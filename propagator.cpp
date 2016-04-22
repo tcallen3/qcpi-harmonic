@@ -300,9 +300,9 @@ void Propagator::rk4(cvector & y, cvector & dydx, double h,
     double h_mid, h_6;
     cvector yt, dyt, dym;
 
-    yt.assign(matLen*matLen, 0.0);
-    dyt.assign(matLen*matLen, 0.0);
-    dym.assign(matLen*matLen, 0.0);
+    yt.assign(y.size(), 0.0);
+    dyt.assign(y.size(), 0.0);
+    dym.assign(y.size(), 0.0);
 
     h_mid = 0.5*h;
     h_6 = h/6.0;
@@ -343,8 +343,8 @@ void Propagator::rkdriver(double x1, double x2, int nstep)
     cvector v, vout, dv;
 
     v.assign(prop.begin(), prop.end());
-    vout.assign(matLen*matLen, 0.0);
-    dv.assign(matLen*matLen, 0.0);
+    vout.assign(v.size(), 0.0);
+    dv.assign(v.size(), 0.0);
 
     h = (x2-x1)/nstep;
 
