@@ -152,8 +152,8 @@ MPI_Init(&argc, &argv);
 
     Path pstart;
 
-    pstart.fwd_path.push_back(0);   // left-localized
-    pstart.bwd_path.push_back(0);   // left-localized
+    pstart.fwdPath.push_back(0);   // left-localized
+    pstart.bwdPath.push_back(0);   // left-localized
     pstart.product = 1.0;
 
     // initialize harmonic bath arrays
@@ -229,8 +229,8 @@ MPI_Init(&argc, &argv);
                     for (int bwd = 0; bwd < DSTATES; bwd++)
                     {
                         Path incr_path(temp);
-                        incr_path.fwd_path.push_back(fwd);
-                        incr_path.bwd_path.push_back(bwd);
+                        incr_path.fwdPath.push_back(fwd);
+                        incr_path.bwdPath.push_back(bwd);
 
                         tempList.push_back(incr_path);
                     }
@@ -290,15 +290,15 @@ MPI_Init(&argc, &argv);
 
         for (unsigned path = 0; path < pathList.size(); path++)
         {
-            tPath.assign(pathList[path].fwd_path.begin()+1, 
-                pathList[path].fwd_path.end());
+            tPath.assign(pathList[path].fwdPath.begin()+1, 
+                pathList[path].fwdPath.end());
 
-            pathList[path].fwd_path.swap(tPath);
+            pathList[path].fwdPath.swap(tPath);
 
-            tPath.assign(pathList[path].bwd_path.begin()+1, 
-                pathList[path].bwd_path.end());
+            tPath.assign(pathList[path].bwdPath.begin()+1, 
+                pathList[path].bwdPath.end());
 
-            pathList[path].bwd_path.swap(tPath);
+            pathList[path].bwdPath.swap(tPath);
         }
 
 
@@ -367,8 +367,8 @@ MPI_Init(&argc, &argv);
                         Path temp;
                         temp = pathList[path];
 
-                        temp.fwd_path.push_back(fwd);
-                        temp.bwd_path.push_back(bwd);
+                        temp.fwdPath.push_back(fwd);
+                        temp.bwdPath.push_back(bwd);
 
                         // calculate x(t) and p(t) at integration points
                         // along new path (note this changes x0, p0 in temp)
@@ -394,11 +394,11 @@ MPI_Init(&argc, &argv);
 
                         vector<unsigned> ftemp, btemp;
 
-                        ftemp.assign(temp.fwd_path.begin()+1, 
-                            temp.fwd_path.end() );
+                        ftemp.assign(temp.fwdPath.begin()+1, 
+                            temp.fwdPath.end() );
 
-                        btemp.assign(temp.bwd_path.begin()+1, 
-                            temp.bwd_path.end() );
+                        btemp.assign(temp.bwdPath.begin()+1, 
+                            temp.bwdPath.end() );
 
                         unsigned long long target = get_binary(ftemp, btemp);
                         
@@ -412,7 +412,7 @@ MPI_Init(&argc, &argv);
         
                         // update ICs if we have correct donor element
 
-                        if (temp.fwd_path[0] == fRand && temp.bwd_path[0] == bRand)
+                        if (temp.fwdPath[0] == fRand && temp.bwdPath[0] == bRand)
                         {
                             tempList[outPath].x0.assign(temp.x0.begin(), temp.x0.end());
                             tempList[outPath].p0.assign(temp.p0.begin(), temp.p0.end());
@@ -420,8 +420,8 @@ MPI_Init(&argc, &argv);
 
                         // pop off previous update (returning length to kmax)
 
-                        temp.fwd_path.pop_back();
-                        temp.bwd_path.pop_back();
+                        temp.fwdPath.pop_back();
+                        temp.bwdPath.pop_back();
 
                     } // end bwd loop
 
@@ -489,10 +489,10 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
         x0 = qm_path.x0[mode];
         p0 = qm_path.p0[mode];
 
-        unsigned size = qm_path.fwd_path.size();
+        unsigned size = qm_path.fwdPath.size();
 
-        unsigned splus = qm_path.fwd_path[size-2];
-        unsigned sminus = qm_path.bwd_path[size-2];
+        unsigned splus = qm_path.fwdPath[size-2];
+        unsigned sminus = qm_path.bwdPath[size-2];
 
         double shift = (dvr_vals[splus] + dvr_vals[sminus])/2.0;
 
@@ -501,7 +501,7 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
         // clear out any old trajectory info
         // might be more efficient just to overwrite
 
-        mlist[mode].x_t.clear();
+        mlist[mode].xt.clear();
 
         // calculate time evolution for first
         // half of path
@@ -511,7 +511,7 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
 
         pt = p0*cos(w*del_t) - mass*w*(x0 - shift)*sin(w*del_t);
 
-        mlist[mode].first_phase = (x0 - shift)*sin(w*del_t) -
+        mlist[mode].phase1 = (x0 - shift)*sin(w*del_t) -
             (p0/(mass*w))*(cos(w*del_t) - 1.0) + shift*w*del_t;
 
         // swap x0, p0 with xt, pt
@@ -521,8 +521,8 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
 
         // find s vals and shift for second half of trajectory
 
-        splus = qm_path.fwd_path[size-1];
-        sminus = qm_path.bwd_path[size-1];
+        splus = qm_path.fwdPath[size-1];
+        sminus = qm_path.bwdPath[size-1];
 
         shift = (dvr_vals[splus] + dvr_vals[sminus])/2.0;
 
@@ -536,7 +536,7 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
 
         pt = p0*cos(w*del_t) - mass*w*(x0 - shift)*sin(w*del_t);
 
-        mlist[mode].second_phase = (x0 - shift)*sin(w*del_t) -
+        mlist[mode].phase2 = (x0 - shift)*sin(w*del_t) -
             (p0/(mass*w))*(cos(w*del_t) - 1.0) + shift*w*del_t;
 
         // update current phase space point
@@ -565,31 +565,31 @@ double action_calc_exact(Path & qm_path, std::vector<Mode> & mlist,
 
         // set indices to correct half steps
 
-        unsigned size = qm_path.fwd_path.size();
+        unsigned size = qm_path.fwdPath.size();
 
-        unsigned splus = qm_path.fwd_path[size-2];
-        unsigned sminus = qm_path.bwd_path[size-2];
+        unsigned splus = qm_path.fwdPath[size-2];
+        unsigned sminus = qm_path.bwdPath[size-2];
 
         double ds = dvr_vals[splus] - dvr_vals[sminus];
         double pre = (mlist[mode].c * ds)/mlist[mode].omega;
 
         // find first half of action sum
 
-        sum += pre * (mlist[mode].first_phase - 
-            reflist[mode].first_phase);
+        sum += pre * (mlist[mode].phase1 - 
+            reflist[mode].phase1);
 
         // recalculate prefactor
 
-        splus = qm_path.fwd_path[size-1];
-        sminus = qm_path.bwd_path[size-1];
+        splus = qm_path.fwdPath[size-1];
+        sminus = qm_path.bwdPath[size-1];
 
         ds = dvr_vals[splus] - dvr_vals[sminus];
         pre = (mlist[mode].c * ds)/mlist[mode].omega;
 
         // find second half of action sum
 
-        sum += pre * (mlist[mode].second_phase - 
-            reflist[mode].second_phase);
+        sum += pre * (mlist[mode].phase2 - 
+            reflist[mode].phase2);
 
         action += sum;
 
@@ -606,12 +606,12 @@ void sum_paths(std::vector<Path> & pathList, cvector & rho,
     if (pathList.begin() == pathList.end())
         return;
 
-    unsigned size = pathList[0].fwd_path.size();
+    unsigned size = pathList[0].fwdPath.size();
 
     for (unsigned path = 0; path < pathList.size(); path++)
     {
-        unsigned splus1 = pathList[path].fwd_path[size-1];
-        unsigned sminus1 = pathList[path].bwd_path[size-1];
+        unsigned splus1 = pathList[path].fwdPath[size-1];
+        unsigned sminus1 = pathList[path].bwdPath[size-1];
 
         unsigned rindex = splus1*DSTATES + sminus1;
 
@@ -657,7 +657,7 @@ unsigned long long get_binary(Path & entry)
     // also, assumes binary number is in order of normal printing of fwd/bwd
     // i.e. {010,110} -> 010110 -> 22
 
-    if (entry.fwd_path.size() == 0 || entry.bwd_path.size() == 0)
+    if (entry.fwdPath.size() == 0 || entry.bwdPath.size() == 0)
     {
         char err_msg[FLEN];
 
@@ -667,18 +667,18 @@ unsigned long long get_binary(Path & entry)
         throw std::runtime_error(err_msg);
     }
 
-    for (unsigned pos = entry.bwd_path.size() - 1; pos >= 0; pos--)
+    for (unsigned pos = entry.bwdPath.size() - 1; pos >= 0; pos--)
     {
-        sum += entry.bwd_path[pos] * pre;
+        sum += entry.bwdPath[pos] * pre;
         pre *= DSTATES;
 
         if (pos == 0)
             break;
     }
 
-    for (unsigned pos = entry.fwd_path.size() - 1; pos >= 0; pos--)
+    for (unsigned pos = entry.fwdPath.size() - 1; pos >= 0; pos--)
     {
-        sum += entry.fwd_path[pos] * pre;
+        sum += entry.fwdPath[pos] * pre;
         pre *= DSTATES;
 
         if (pos == 0)

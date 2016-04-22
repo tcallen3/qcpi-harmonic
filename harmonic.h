@@ -53,8 +53,8 @@ enum Ref {REF_LEFT, REF_RIGHT};
 // structure definitions
 struct Path
 {
-    vector<unsigned> fwd_path;
-    vector<unsigned> bwd_path;
+    vector<unsigned> fwdPath;
+    vector<unsigned> bwdPath;
     complex<double> product;
     vector<double> x0;
     vector<double> p0;
@@ -63,12 +63,12 @@ struct Path
 
 struct Mode
 {
-    vector<double> x_t;
+    vector<double> xt;
     
     double c;
     double omega;
-    double first_phase;
-    double second_phase;
+    double phase1;
+    double phase2;
 };
 
 #endif

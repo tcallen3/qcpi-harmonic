@@ -50,15 +50,15 @@ void Propagator::pick_ref(int seg, gsl_rng * gen)
 
 complex<double> Propagator::get_kernel_prod(const Path & path)
 {
-    unsigned size = path.fwd_path.size();
+    unsigned size = path.fwdPath.size();
     
-    unsigned splus0 = path.fwd_path[size-2];
-    unsigned splus1 = path.fwd_path[size-1];
+    unsigned splus0 = path.fwdPath[size-2];
+    unsigned splus1 = path.fwdPath[size-1];
 
     unsigned findex = splus1*DSTATES + splus0;
 
-    unsigned sminus0 = path.bwd_path[size-2];
-    unsigned sminus1 = path.bwd_path[size-1];
+    unsigned sminus0 = path.bwdPath[size-2];
+    unsigned sminus1 = path.bwdPath[size-1];
                 
     unsigned bindex = sminus1*DSTATES + sminus0;
 
@@ -131,7 +131,7 @@ void Propagator::ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData)
         // clear out any old trajectory info
         // might be more efficient just to overwrite
 
-        mlist[mode].x_t.clear();
+        mlist[mode].xt.clear();
 
         // set up ICs for chunk calc
 
@@ -148,7 +148,7 @@ void Propagator::ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData)
             pt = p0*cos(w*chunkDelta) - 
                 mass*w*(x0 - shift)*sin(w*chunkDelta);
 
-            mlist[mode].x_t.push_back(xt);
+            mlist[mode].xt.push_back(xt);
 
             x0 = xt;
             p0 = pt;
@@ -166,7 +166,7 @@ void Propagator::ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData)
 
         pt = p0*cos(w*delta) - mass*w*(x0 - shift)*sin(w*delta);
 
-        mlist[mode].first_phase = (x0 - shift)*sin(w*delta) - 
+        mlist[mode].phase1 = (x0 - shift)*sin(w*delta) - 
             (p0/(mass*w))*(cos(w*delta)-1.0) + shift*w*delta;
 
         // swap x0, p0 and xt, pt
@@ -181,7 +181,7 @@ void Propagator::ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData)
 
         pt = p0*cos(w*delta) - mass*w*(x0 - shift)*sin(w*delta);
 
-        mlist[mode].second_phase = (x0 - shift)*sin(w*delta) - 
+        mlist[mode].phase2 = (x0 - shift)*sin(w*delta) - 
             (p0/(mass*w))*(cos(w*delta)-1.0) + shift*w*delta;
 
         // update current phase space point
@@ -239,7 +239,7 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
     {
         double csquare = modes[i].c*modes[i].c;
         double wsquare = modes[i].omega*modes[i].omega;
-        double x = modes[i].x_t[chunk];
+        double x = modes[i].xt[chunk];
 
         for (int index = 0; index < matLen; index++)
         {
