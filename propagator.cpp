@@ -340,23 +340,23 @@ it much, but it was part of the NR approach so it got rolled in here */
 void Propagator::rkdriver(double tstart, double tend, int nsteps)
 {
     double dt;
-    cvector v, vout, dv;
+    cvector vecIn, vecOut, derivs;
 
-    v.assign(prop.begin(), prop.end());
-    vout.assign(v.size(), 0.0);
-    dv.assign(v.size(), 0.0);
+    vecIn.assign(prop.begin(), prop.end());
+    vecOut.assign(vecIn.size(), 0.0);
+    derivs.assign(vecIn.size(), 0.0);
 
     dt = (tend - tstart)/nsteps;
 
     for (int step = 0; step < nsteps; step++)
     {
-        prop_eqns(v, dv);
-        rk4(v, dv, dt, vout);
+        prop_eqns(vecIn, derivs);
+        rk4(vecIn, derivs, dt, vecOut);
 
-        v.assign(vout.begin(), vout.end());
+        vecIn.assign(vecOut.begin(), vecOut.end());
     }
 
-    ptemp.assign(vout.begin(), vout.end());
+    ptemp.assign(vecOut.begin(), vecOut.end());
 }
 
 /* ------------------------------------------------------------------------ */
