@@ -99,7 +99,7 @@ void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
         // integrate TDSE for U(t) w/ piece-wise constant
         // Hamiltonian approx.
 
-        rkdriver(0.0, simData.rhoDelta, simData.rhoSteps);
+        ode_solve(0.0, simData.rhoDelta, simData.rhoSteps);
 
         // swap out true and temp pointers
 
@@ -294,7 +294,7 @@ robust complex libraries are hard to find. The derivs fn pointer specifies
 the function that will define the ODE equations, and the params array is
 included for extra flexibility, as per GSL */
 
-void Propagator::rk4(cvector & yin, double dt, cvector & yout)
+void Propagator::ode_step(cvector & yin, double dt, cvector & yout)
 {
     double dt2, dt6;
     cvector yt, k1, k2, k3, k4;
@@ -302,9 +302,7 @@ void Propagator::rk4(cvector & yin, double dt, cvector & yout)
     yt.assign(yin.size(), 0.0);
 
     k1.assign(yin.size(), 0.0);
-    k2.assign(yin.size(), 0.0);
-    k3.assign(yin.size(), 0.0);
-    k4.assign(yin.size(), 0.0);
+    k4 = k3 = k2 = k1;
 
     dt2 = 0.5*dt;
     dt6 = dt/6.0;
@@ -350,7 +348,7 @@ run using more or less the same input, it initializes some things and
 then simply calls the underlying function in a loop; we don't really use
 it much, but it was part of the NR approach so it got rolled in here */
 
-void Propagator::rkdriver(double tstart, double tend, int nsteps)
+void Propagator::ode_solve(double tstart, double tend, int nsteps)
 {
     double dt;
     cvector vecIn, vecOut;
@@ -362,7 +360,7 @@ void Propagator::rkdriver(double tstart, double tend, int nsteps)
 
     for (int step = 0; step < nsteps; step++)
     {
-        rk4(vecIn, dt, vecOut);
+        ode_step(vecIn, dt, vecOut);
 
         vecIn.assign(vecOut.begin(), vecOut.end());
     }
