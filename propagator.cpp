@@ -298,11 +298,14 @@ void Propagator::rk4(cvector & vecIn, cvector & derivs, double dt,
     cvector & vecOut)
 {
     double dt2, dt6;
-    cvector yt, dyt, dym;
+    cvector yt, k1, k2, k3, k4;
 
     yt.assign(vecIn.size(), 0.0);
-    dyt.assign(vecIn.size(), 0.0);
-    dym.assign(vecIn.size(), 0.0);
+
+    k1.assign(vecIn.size(), 0.0);
+    k2.assign(vecIn.size(), 0.0);
+    k3.assign(vecIn.size(), 0.0);
+    k4.assign(vecIn.size(), 0.0);
 
     dt2 = 0.5*dt;
     dt6 = dt/6.0;
@@ -310,35 +313,33 @@ void Propagator::rk4(cvector & vecIn, cvector & derivs, double dt,
     // generate k_i derivatives for RK4 algorithm
     // k_1 is just derivs vector
 
+    prop_eqns(vecIn, k1);
+
     // find k_2 from midpoint projection
 
-    for (unsigned i = 0; i < yt.size(); i++)
-        yt[i] = vecIn[i] + dt2*derivs[i];
+    for (unsigned i = 0; i < vecIn.size(); i++)
+        yt[i] = vecIn[i] + dt2*k1[i];
     
-    prop_eqns(yt, dyt);
+    prop_eqns(yt, k2);
    
     // find k_3 from midpoint projection of k_2
 
-    for (unsigned i = 0; i < yt.size(); i++)
-        yt[i] = vecIn[i] + dt2*dyt[i];    
+    for (unsigned i = 0; i < vecIn.size(); i++)
+        yt[i] = vecIn[i] + dt2*k2[i];    
 
-    prop_eqns(yt, dym);
+    prop_eqns(yt, k3);
 
     // find k_4 from endpoint projection of k_3
-    // combine k_2 and k_3 since they share prefactor
 
-    for (unsigned i = 0; i < yt.size(); i++)
-    {
-        yt[i] = vecIn[i] + dt*dym[i];
-        dym[i] += dyt[i];
-    }
+    for (unsigned i = 0; i < vecIn.size(); i++)
+        yt[i] = vecIn[i] + dt*k3[i];
     
-    prop_eqns(yt, dyt);
+    prop_eqns(yt, k4);
 
     // sum k_i contributions to get result at t+dt
 
-    for (unsigned i = 0; i < dyt.size(); i++)
-        vecOut[i] = vecIn[i] + dt6*(derivs[i] + dyt[i] + 2.0*dym[i]);
+    for (unsigned i = 0; i < vecIn.size(); i++)
+        vecOut[i] = vecIn[i] + dt6*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
 
 }
 
