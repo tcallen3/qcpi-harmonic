@@ -337,7 +337,7 @@ run using more or less the same input, it initializes some things and
 then simply calls the underlying function in a loop; we don't really use
 it much, but it was part of the NR approach so it got rolled in here */
 
-void Propagator::rkdriver(double tstart, double tend, int nstep)
+void Propagator::rkdriver(double tstart, double tend, int nsteps)
 {
     double dt;
     cvector v, vout, dv;
@@ -346,9 +346,9 @@ void Propagator::rkdriver(double tstart, double tend, int nstep)
     vout.assign(v.size(), 0.0);
     dv.assign(v.size(), 0.0);
 
-    dt = (tend - tstart)/nstep;
+    dt = (tend - tstart)/nsteps;
 
-    for (int k = 1; k <= nstep; k++)
+    for (int step = 0; step < nsteps; step++)
     {
         prop_eqns(v, dv);
         rk4(v, dv, dt, vout);
