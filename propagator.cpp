@@ -294,8 +294,7 @@ robust complex libraries are hard to find. The derivs fn pointer specifies
 the function that will define the ODE equations, and the params array is
 included for extra flexibility, as per GSL */
 
-void Propagator::rk4(cvector & vecIn, cvector & derivs, double dt, 
-    cvector & vecOut)
+void Propagator::rk4(cvector & vecIn, double dt, cvector & vecOut)
 {
     double dt2, dt6;
     cvector yt, k1, k2, k3, k4;
@@ -311,25 +310,26 @@ void Propagator::rk4(cvector & vecIn, cvector & derivs, double dt,
     dt6 = dt/6.0;
 
     // generate k_i derivatives for RK4 algorithm
-    // k_1 is just derivs vector
+
+    // find k1 from initial time point
 
     prop_eqns(vecIn, k1);
 
-    // find k_2 from midpoint projection
+    // find k2 from midpoint projection
 
     for (unsigned i = 0; i < vecIn.size(); i++)
         yt[i] = vecIn[i] + dt2*k1[i];
     
     prop_eqns(yt, k2);
    
-    // find k_3 from midpoint projection of k_2
+    // find k3 from midpoint projection of k2
 
     for (unsigned i = 0; i < vecIn.size(); i++)
         yt[i] = vecIn[i] + dt2*k2[i];    
 
     prop_eqns(yt, k3);
 
-    // find k_4 from endpoint projection of k_3
+    // find k4 from endpoint projection of k3
 
     for (unsigned i = 0; i < vecIn.size(); i++)
         yt[i] = vecIn[i] + dt*k3[i];
@@ -353,18 +353,16 @@ it much, but it was part of the NR approach so it got rolled in here */
 void Propagator::rkdriver(double tstart, double tend, int nsteps)
 {
     double dt;
-    cvector vecIn, vecOut, derivs;
+    cvector vecIn, vecOut;
 
     vecIn.assign(prop.begin(), prop.end());
     vecOut.assign(vecIn.size(), 0.0);
-    derivs.assign(vecIn.size(), 0.0);
 
     dt = (tend - tstart)/nsteps;
 
     for (int step = 0; step < nsteps; step++)
     {
-        prop_eqns(vecIn, derivs);
-        rk4(vecIn, derivs, dt, vecOut);
+        rk4(vecIn, dt, vecOut);
 
         vecIn.assign(vecOut.begin(), vecOut.end());
     }
