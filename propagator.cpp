@@ -294,17 +294,17 @@ robust complex libraries are hard to find. The derivs fn pointer specifies
 the function that will define the ODE equations, and the params array is
 included for extra flexibility, as per GSL */
 
-void Propagator::rk4(cvector & vecIn, double dt, cvector & vecOut)
+void Propagator::rk4(cvector & yin, double dt, cvector & yout)
 {
     double dt2, dt6;
     cvector yt, k1, k2, k3, k4;
 
-    yt.assign(vecIn.size(), 0.0);
+    yt.assign(yin.size(), 0.0);
 
-    k1.assign(vecIn.size(), 0.0);
-    k2.assign(vecIn.size(), 0.0);
-    k3.assign(vecIn.size(), 0.0);
-    k4.assign(vecIn.size(), 0.0);
+    k1.assign(yin.size(), 0.0);
+    k2.assign(yin.size(), 0.0);
+    k3.assign(yin.size(), 0.0);
+    k4.assign(yin.size(), 0.0);
 
     dt2 = 0.5*dt;
     dt6 = dt/6.0;
@@ -313,33 +313,33 @@ void Propagator::rk4(cvector & vecIn, double dt, cvector & vecOut)
 
     // find k1 from initial time point
 
-    prop_eqns(vecIn, k1);
+    prop_eqns(yin, k1);
 
     // find k2 from midpoint projection
 
-    for (unsigned i = 0; i < vecIn.size(); i++)
-        yt[i] = vecIn[i] + dt2*k1[i];
+    for (unsigned i = 0; i < yin.size(); i++)
+        yt[i] = yin[i] + dt2*k1[i];
     
     prop_eqns(yt, k2);
    
     // find k3 from midpoint projection of k2
 
-    for (unsigned i = 0; i < vecIn.size(); i++)
-        yt[i] = vecIn[i] + dt2*k2[i];    
+    for (unsigned i = 0; i < yin.size(); i++)
+        yt[i] = yin[i] + dt2*k2[i];    
 
     prop_eqns(yt, k3);
 
     // find k4 from endpoint projection of k3
 
-    for (unsigned i = 0; i < vecIn.size(); i++)
-        yt[i] = vecIn[i] + dt*k3[i];
+    for (unsigned i = 0; i < yin.size(); i++)
+        yt[i] = yin[i] + dt*k3[i];
     
     prop_eqns(yt, k4);
 
     // sum k_i contributions to get result at t+dt
 
-    for (unsigned i = 0; i < vecIn.size(); i++)
-        vecOut[i] = vecIn[i] + dt6*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
+    for (unsigned i = 0; i < yin.size(); i++)
+        yout[i] = yin[i] + dt6*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
 
 }
 
