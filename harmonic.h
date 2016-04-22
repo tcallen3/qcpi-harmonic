@@ -27,9 +27,9 @@ const int FLEN = 1024;
 
 // EDIT NOTE: (move to namespace and header)
 // semi-constants (working in a.u.) 
-const double kcal_to_hartree = 1.5936e-3; // For converting asymmetry to hartree
+const double kcalToHartree = 1.5936e-3; // For converting asymmetry to hartree
 const double kb = 3.1668114e-6;         // Boltzmann's constant for K to hartree
-const double tls_freq = 0.00016445;        // off-diagonal element of hamiltonian
+const double tlsFreq = 0.00016445;        // off-diagonal element of hamiltonian
 const double mass = 1.0;                // all masses taken normalized
 const double hbar = 1.0;                // using atomic units
 const int DSTATES = 2;                  // number of DVR basis states
@@ -37,8 +37,8 @@ const complex<double> I(0.0, 1.0);
 
 // EDIT NOTE: (need to generalize)
 // DVR eigenvals (fixed for now) 
-const double dvr_left = 1.0;
-const double dvr_right = -1.0;
+const double dvrLeft = 1.0;
+const double dvrRight = -1.0;
 }
 // EDIT NOTE: (Move data structs to header and clean up)
 
@@ -49,9 +49,6 @@ enum Branch {BRANCH_LEFT, BRANCH_MID, BRANCH_RIGHT};
 // reference state enums
 
 enum Ref {REF_LEFT, REF_RIGHT};
-
-// type definitions
-typedef pair<unsigned, unsigned long long> iter_pair;
 
 // structure definitions
 struct Path

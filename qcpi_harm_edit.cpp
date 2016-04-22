@@ -474,7 +474,7 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
         SimInfo & simData)
 {
     double del_t = simData.dt/2.0;
-    double dvr_vals[DSTATES] = {dvr_left, dvr_right};
+    double dvr_vals[DSTATES] = {dvrLeft, dvrRight};
 
     for (int mode = 0; mode < simData.bathModes; mode++)
     {
@@ -552,7 +552,7 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
 double action_calc_exact(Path & qm_path, std::vector<Mode> & mlist, 
         std::vector<Mode> & reflist, SimInfo & simData)
 {
-    double dvr_vals[DSTATES] = {dvr_left, dvr_right};
+    double dvr_vals[DSTATES] = {dvrLeft, dvrRight};
 
     // loop over modes and integrate their action contribution
     // as given by S = c*int{del_s(t')*x(t'), 0, t_final}

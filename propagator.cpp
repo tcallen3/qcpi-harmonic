@@ -35,12 +35,12 @@ void Propagator::pick_ref(int seg, gsl_rng * gen)
 
     if (xi < rhoVal)
     {
-        refState = dvr_left;
+        refState = dvrLeft;
         oldRefs[seg] = REF_LEFT;
     }
     else    
     {
-        refState = dvr_right;
+        refState = dvrRight;
         oldRefs[seg] = REF_RIGHT;
     }
 
@@ -200,7 +200,7 @@ void Propagator::ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData)
 void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simData)
 {
     // copy off-diagonal from anharmonic code
-    const double offDiag = hbar*tls_freq;
+    const double offDiag = hbar*tlsFreq;
 
     // store system and system-bath coupling contributions separately
     std::vector<complex<double> > tls_mat;
@@ -211,8 +211,8 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
 
     std::vector<double> dvrVals;
 
-    dvrVals.push_back(dvr_left);
-    dvrVals.push_back(dvr_right);
+    dvrVals.push_back(dvrLeft);
+    dvrVals.push_back(dvrRight);
 
     // system matrix is just splitting and any asymmetry
     // note that signs should be standard b/c I'm using

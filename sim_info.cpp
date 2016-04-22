@@ -84,7 +84,7 @@ void SimInfo::startup(std::string config, Tokenizer & tok)
     // set additional parameters
 
     rhoDelta = dt/chunks;
-    asym *= kcal_to_hartree;
+    asym *= kcalToHartree;
     beta = 1.0/(kb*bathTemp);
 
     // make sure MC run is long enough
@@ -328,10 +328,10 @@ void SimInfo::print(FILE * outfile, int repeat)
 
     fprintf(outfile, "\n\n");
 
-    fprintf(outfile, "Off-diagonal TLS element: %f\n", tls_freq);
+    fprintf(outfile, "Off-diagonal TLS element: %f\n", tlsFreq);
     fprintf(outfile, "Asymmetry: %.7e hartree\n", asym);
-    fprintf(outfile, "Left DVR state: %.3f\n", dvr_left);
-    fprintf(outfile, "Right DVR state: %.3f\n\n", dvr_right);
+    fprintf(outfile, "Left DVR state: %.3f\n", dvrLeft);
+    fprintf(outfile, "Right DVR state: %.3f\n\n", dvrRight);
 }
 
 /* ------------------------------------------------------------------------- */

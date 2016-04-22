@@ -133,7 +133,7 @@ double InitialBath::dist(unsigned index, double beta)
 
     // shift to DVR state w/ -1 element in sigma_z basis
 
-    double lambda = dvr_left * coup * ( 1.0/(mass*omega*omega) );
+    double lambda = dvrLeft * coup * ( 1.0/(mass*omega*omega) );
 
     // shifting distribution for equilibrium
 
@@ -251,7 +251,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
         pStep[i] = gsl_rng_uniform(gen) * baseStep;
 
         double pos = 
-            bathCoup[i]*( dvr_left/(mass*bathFreq[i]*bathFreq[i]) );
+            bathCoup[i]*( dvrLeft/(mass*bathFreq[i]*bathFreq[i]) );
 
         xCurr[i] = pos;
         pCurr[i] = 0.0;
@@ -315,7 +315,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
     {
         // re-initialize bath coordinates
         
-        xCurr[i] = bathCoup[i] * ( dvr_left/(mass*bathFreq[i]*bathFreq[i]) );
+        xCurr[i] = bathCoup[i] * ( dvrLeft/(mass*bathFreq[i]*bathFreq[i]) );
         pCurr[i] = 0.0;
     }
 
@@ -373,7 +373,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
     for (int i = 0; i < simData.bathModes; i++)
     {
-        double pos = bathCoup[i] * ( dvr_left/(mass*bathFreq[i]*bathFreq[i]) );
+        double pos = bathCoup[i] * ( dvrLeft/(mass*bathFreq[i]*bathFreq[i]) );
 
         if (gsl_rng_uniform_int(gen, 2) == 0)
             xVals[i] = pos + gsl_rng_uniform(gen) * xStep[i];
