@@ -294,39 +294,39 @@ robust complex libraries are hard to find. The derivs fn pointer specifies
 the function that will define the ODE equations, and the params array is
 included for extra flexibility, as per GSL */
 
-void Propagator::rk4(cvector & y, cvector & dydx, double h, 
+void Propagator::rk4(cvector & y, cvector & dydx, double dt, 
     cvector & yout)
 {
-    double h_mid, h_6;
+    double dt2, dt6;
     cvector yt, dyt, dym;
 
     yt.assign(y.size(), 0.0);
     dyt.assign(y.size(), 0.0);
     dym.assign(y.size(), 0.0);
 
-    h_mid = 0.5*h;
-    h_6 = h/6.0;
+    dt2 = 0.5*dt;
+    dt6 = dt/6.0;
 
     for (unsigned i = 0; i < yt.size(); i++)
-        yt[i] = y[i] + h_mid*dydx[i];    /* first step */
+        yt[i] = y[i] + dt2*dydx[i];    /* first step */
     
     prop_eqns(yt, dyt);        /* second step */
     
     for (unsigned i = 0; i < yt.size(); i++)
-        yt[i] = y[i] + h_mid*dyt[i];    
+        yt[i] = y[i] + dt2*dyt[i];    
 
     prop_eqns(yt, dym);        /* third step */
 
     for (unsigned i = 0; i < yt.size(); i++)
     {
-        yt[i] = y[i] + h*dym[i];
+        yt[i] = y[i] + dt*dym[i];
         dym[i] += dyt[i];
     }
     
     prop_eqns(yt, dyt);    /* fourth step */
 
     for (unsigned i = 0; i < dyt.size(); i++)
-        yout[i] = y[i] + h_6*(dydx[i] + dyt[i] + 2.0*dym[i]);
+        yout[i] = y[i] + dt6*(dydx[i] + dyt[i] + 2.0*dym[i]);
 
 }
 
