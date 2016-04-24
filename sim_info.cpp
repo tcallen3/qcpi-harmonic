@@ -89,10 +89,10 @@ void SimInfo::startup(std::string config, Tokenizer & tok)
 
     // make sure MC run is long enough
 
-    const long mc_buff = 10000;
+    const long mcBuffer = 10000;
 
-    if (mcSteps < mc_buff * bathModes)
-        mcSteps = mc_buff * bathModes;
+    if (mcSteps < mcBuffer * bathModes)
+        mcSteps = mcBuffer * bathModes;
 
     // ensure inputs are meaningful
 
@@ -103,23 +103,23 @@ void SimInfo::startup(std::string config, Tokenizer & tok)
 
 void SimInfo::parse_file(std::string config, Tokenizer & tok)
 {
-    const char comment_char = '#';
+    const char commentChar = '#';
 
-    ifstream conf_file;
+    ifstream confFile;
     std::string buffer;
     std::string arg1;
     std::string arg2;
 
-    conf_file.open(config.c_str(), ios_base::in);
+    confFile.open(config.c_str(), ios_base::in);
 
-    if (!conf_file.is_open())
+    if (!confFile.is_open())
         throw std::runtime_error("Could not open configuration file\n");
 
     // read in file line-by-line
 
     Tokenizer::iterator iter;
 
-    while (getline(conf_file, buffer))
+    while (getline(confFile, buffer))
     {   
         tok.assign(buffer);
 
@@ -132,7 +132,7 @@ void SimInfo::parse_file(std::string config, Tokenizer & tok)
 
         arg1 = *iter;
 
-        if (arg1[0] == comment_char)
+        if (arg1[0] == commentChar)
             continue;
 
         // assign arguments
@@ -233,7 +233,7 @@ void SimInfo::parse_file(std::string config, Tokenizer & tok)
             continue;
     }
 
-    conf_file.close();
+    confFile.close();
 }
 
 /* ------------------------------------------------------------------------- */
