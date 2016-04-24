@@ -798,7 +798,7 @@ void print_results(FILE * outfile, SimInfo & simData, cvector & globalRho,
         fprintf(outfile, "Total simulation time: %.3f min\n", globalRuntime/60.0);
         fprintf(outfile, "Configuration file: %s\n\n", configFile.c_str());
 
-        simData.print(outfile, repeat);
+        simData.print_vars(outfile, repeat);
 
         for (int i = 0; i < repeat; i++)
             fprintf(outfile, "-");

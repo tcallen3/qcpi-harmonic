@@ -44,7 +44,7 @@ class SimInfo
 
         SimInfo();
         void startup(std::string config, Tokenizer & tok); 
-        void print(FILE * outfile, int repeat);
+        void print_vars(FILE * outfile, int repeat);
 };
 
 #endif

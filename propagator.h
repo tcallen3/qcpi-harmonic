@@ -13,6 +13,7 @@ class Propagator
 {
     private:
         int matLen;
+        cvector prop;
         cvector ham;
         cvector ptemp;
         double refState;
@@ -24,7 +25,6 @@ class Propagator
         void ode_solve(double tstart, double tend, int nsteps);
 
     public:
-        cvector prop;
         std::vector<Ref> oldRefs;
         std::vector<complex<double> > qiAmp;
         vector<double> xRef;

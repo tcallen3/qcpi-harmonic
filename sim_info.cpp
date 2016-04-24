@@ -285,7 +285,7 @@ void SimInfo::sanity_check()
 
 /* ------------------------------------------------------------------------- */
 
-void SimInfo::print(FILE * outfile, int repeat)
+void SimInfo::print_vars(FILE * outfile, int repeat)
 {
     fprintf(outfile, "Quantum steps: %d\n", qmSteps);
     fprintf(outfile, "Memory length (kmax): %d\n", kmax);
