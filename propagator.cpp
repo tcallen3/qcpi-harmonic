@@ -203,11 +203,11 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
     const double offDiag = hbar*tlsFreq;
 
     // store system and system-bath coupling contributions separately
-    std::vector<complex<double> > tls_mat;
-    std::vector<complex<double> > bath_mat;
+    std::vector<complex<double> > systemMat;
+    std::vector<complex<double> > bathMat;
 
-    tls_mat.assign(matLen*matLen, 0.0);
-    bath_mat.assign(matLen*matLen, 0.0);
+    systemMat.assign(matLen*matLen, 0.0);
+    bathMat.assign(matLen*matLen, 0.0);
 
     std::vector<double> dvrVals;
 
@@ -223,9 +223,9 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
         for (int j = 0; j < matLen; j++)
         {
             if (i == j)
-                tls_mat[i*matLen+j] = dvrVals[i]*simData.asym;
+                systemMat[i*matLen+j] = dvrVals[i]*simData.asym;
             else
-                tls_mat[i*matLen+j] = -1.0*offDiag;
+                systemMat[i*matLen+j] = -1.0*offDiag;
         }
     }
 
@@ -249,7 +249,7 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
     }
 
     for (int i = 0; i < matLen; i++)
-        bath_mat[i*matLen+i] = energies[i];
+        bathMat[i*matLen+i] = energies[i];
 
     // total hamiltonian is sum of system and system-bath parts
 
@@ -259,7 +259,7 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
         {
             int index = i*matLen+j;
 
-            ham[index] = tls_mat[index] + bath_mat[index];
+            ham[index] = systemMat[index] + bathMat[index];
         }
     }
 
