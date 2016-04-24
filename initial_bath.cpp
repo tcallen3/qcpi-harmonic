@@ -24,24 +24,25 @@ InitialBath::InitialBath(unsigned modes)
 }
 
 /* ------------------------------------------------------------------------- */
+
 void InitialBath::read_spec(std::string specName, std::vector<double> & omega, 
     std::vector<double> & jvals, Tokenizer & tok)
 {
-    ifstream spec_file;
+    ifstream specFile;
     std::string buffer;
     std::string entry;
-    const char comment_char = '#';
+    const char commentChar = '#';
 
-    spec_file.open(specName.c_str(), std::ios_base::in);
+    specFile.open(specName.c_str(), std::ios_base::in);
 
-    if (!spec_file.is_open())
+    if (!specFile.is_open())
         throw std::runtime_error("Could not open spectral density file\n");
 
     // read in file line-by-line
 
     Tokenizer::iterator iter;
 
-    while (getline(spec_file, buffer))
+    while (getline(specFile, buffer))
     {   
         tok.assign(buffer);
 
@@ -54,7 +55,7 @@ void InitialBath::read_spec(std::string specName, std::vector<double> & omega,
 
         entry = *iter;
 
-        if (entry[0] == comment_char)
+        if (entry[0] == commentChar)
             continue;
 
         omega.push_back(boost::lexical_cast<double>(entry));
@@ -72,7 +73,7 @@ void InitialBath::read_spec(std::string specName, std::vector<double> & omega,
 
     } // end specden reading
 
-    spec_file.close();
+    specFile.close();
 }
 
 /* ------------------------------------------------------------------------- */
