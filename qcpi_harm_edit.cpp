@@ -463,6 +463,9 @@ MPI_Init(&argc, &argv);
 
     // cleanup
 
+    if (me == 0)
+        fclose(outfile);
+
     MPI_Finalize();
 
     return 0;
