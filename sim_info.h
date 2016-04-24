@@ -1,5 +1,6 @@
-/* Declaration of the SimInfo class, which handles aspects of
- * startup and variable initialization for the simulation.
+/* Declaration of the SimInfo class, which handles simulation
+ * startup and variable initialization, as well as some output
+ * to improve reproducibility. 
  */
 
 #ifndef SIM_INFO_H
@@ -10,6 +11,9 @@
 class SimInfo
 {
     private:
+        
+        // flags to track required parameters
+
         bool qmstepsflg;
         bool qmdtflg;
         bool bathtempflg;
@@ -18,10 +22,16 @@ class SimInfo
         bool inflg;
         bool outflg;
 
+        // utility functions
+
         void parse_file(std::string config, Tokenizer & tok);
         void sanity_check();
 
     public:
+
+        // externally visible simulation state variables
+        // intended for use in other functions/classes
+
         double asym;
         int bathModes;
         double bathTemp;
@@ -41,6 +51,8 @@ class SimInfo
         std::string outputName;
 
         unsigned long seed;
+
+        // primary initialization and reporting functions
 
         SimInfo();
         void startup(std::string config, Tokenizer & tok); 
