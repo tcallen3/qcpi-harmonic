@@ -18,8 +18,9 @@ class Propagator
         cvector ptemp;
         double refState;
 
-        void ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData);
-        void build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simData);
+        void bath_update(std::vector<Mode> & mlist, SimInfo & simData);
+        void build_hamiltonian(std::vector<Mode> & modes, int chunk, 
+                SimInfo & simData);
         void prop_eqns(cvector & y, cvector & dydt);
         void ode_step(cvector & yin, double dt, cvector & yout);
         void ode_solve(double tstart, double tend, int nsteps);

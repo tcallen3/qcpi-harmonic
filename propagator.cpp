@@ -83,9 +83,9 @@ void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
     }
 
     // first find unforced (x,p)
-    // note that ho_update_exact clears ref_modes x(t) and p(t) list
+    // note that bath_update clears ref_modes x(t) and p(t) list
 
-    ho_update_exact(refModes, simData);
+    bath_update(refModes, simData);
 
     // chunk trajectory into pieces for greater
     // accuracy in integrating U(t)
@@ -94,7 +94,7 @@ void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
     {
         // construct H(x,p) from bath configuration
             
-        build_ham(refModes, chunkNum, simData);
+        build_hamiltonian(refModes, chunkNum, simData);
 
         // integrate TDSE for U(t) w/ piece-wise constant
         // Hamiltonian approx.
@@ -110,7 +110,7 @@ void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
 
 /* ------------------------------------------------------------------------- */
 
-void Propagator::ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData)
+void Propagator::bath_update(std::vector<Mode> & mlist, SimInfo & simData)
 {
     double delta = simData.dt/2.0;
     double chunkDelta = simData.dt/simData.chunks;
@@ -197,7 +197,8 @@ void Propagator::ho_update_exact(std::vector<Mode> & mlist, SimInfo & simData)
 // construct system-bath Hamiltonian for
 // current timestep
 
-void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simData)
+void Propagator::build_hamiltonian(std::vector<Mode> & modes, int chunk, 
+        SimInfo & simData)
 {
     // copy off-diagonal from anharmonic code
     const double offDiag = hbar*tlsFreq;
@@ -263,7 +264,7 @@ void Propagator::build_ham(std::vector<Mode> & modes, int chunk, SimInfo & simDa
         }
     }
 
-} // end build_ham()
+} // end build_hamiltonian()
 
 /* ------------------------------------------------------------------------ */
 

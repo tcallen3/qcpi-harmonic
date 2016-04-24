@@ -30,8 +30,8 @@
 using namespace qcpiConstNS;
 
 // QCPI functions
-void qcpi_update_exact(Path &, std::vector<Mode> &, SimInfo &);
-double action_calc_exact(Path &, std::vector<Mode> &, std::vector<Mode> &, 
+void qcpi_update(Path &, std::vector<Mode> &, SimInfo &);
+double action_calc(Path &, std::vector<Mode> &, std::vector<Mode> &, 
     SimInfo &);
 
 void sum_paths(std::vector<Path> & pathList, cvector & rho, 
@@ -40,8 +40,8 @@ void sum_paths(std::vector<Path> & pathList, cvector & rho,
 // mapping functions
 void map_paths(map<unsigned long long, unsigned> &, 
     vector<Path> &);
-unsigned long long get_binary(Path &);
-unsigned long long get_binary(vector<unsigned> &, vector<unsigned> &);
+unsigned long long string_to_nary(Path &);
+unsigned long long string_to_nary(vector<unsigned> &, vector<unsigned> &);
 
 void global_mc_reduce(cvector & rhoLocal, cvector & rhoGlobal, 
         SimInfo & simData, MPI_Comm worldComm);
@@ -256,13 +256,13 @@ MPI_Init(&argc, &argv);
                 // calculate x(t) and p(t) at integration points
                 // along all paths
 
-                qcpi_update_exact(pathList[path], modes, simData);
+                qcpi_update(pathList[path], modes, simData);
 
                 // use integration points to find new phase contribution
 
                 double phi = 0.0;
 
-                phi = action_calc_exact(pathList[path], modes, refModes, simData);
+                phi = action_calc(pathList[path], modes, refModes, simData);
 
                 // EDIT NOTES: (block this into function)
                 // calculate proper rho contribution
@@ -373,13 +373,13 @@ MPI_Init(&argc, &argv);
                         // calculate x(t) and p(t) at integration points
                         // along new path (note this changes x0, p0 in temp)
 
-                        qcpi_update_exact(temp, modes, simData);
+                        qcpi_update(temp, modes, simData);
 
                         // use integration points to find new phase contribution
 
                         double phi;
 
-                        phi = action_calc_exact(temp, modes, refModes, simData);
+                        phi = action_calc(temp, modes, refModes, simData);
 
                         // evaluate tensor element
 
@@ -400,7 +400,7 @@ MPI_Init(&argc, &argv);
                         btemp.assign(temp.bwdPath.begin()+1, 
                             temp.bwdPath.end() );
 
-                        unsigned long long target = get_binary(ftemp, btemp);
+                        unsigned long long target = string_to_nary(ftemp, btemp);
                         
                         // check to see if target path is in list
 
@@ -473,7 +473,7 @@ MPI_Init(&argc, &argv);
 
 /* ------------------------------------------------------------------------ */
 
-void qcpi_update_exact(Path & qmPath, std::vector<Mode> & mlist, 
+void qcpi_update(Path & qmPath, std::vector<Mode> & mlist, 
         SimInfo & simData)
 {
     double delta = simData.dt/2.0;
@@ -552,7 +552,7 @@ void qcpi_update_exact(Path & qmPath, std::vector<Mode> & mlist,
 
 /* ------------------------------------------------------------------------- */
 
-double action_calc_exact(Path & qmPath, std::vector<Mode> & mlist, 
+double action_calc(Path & qmPath, std::vector<Mode> & mlist, 
         std::vector<Mode> & reflist, SimInfo & simData)
 {
     double dvrVals[DSTATES] = {dvrLeft, dvrRight};
@@ -640,7 +640,7 @@ void map_paths(map<unsigned long long, unsigned> & pathMap,
 
     for (unsigned path = 0; path < pathList.size(); path++)
     {
-        binVal = get_binary(pathList[path]);
+        binVal = string_to_nary(pathList[path]);
 
         pathMap[binVal] = path;
     }
@@ -648,10 +648,10 @@ void map_paths(map<unsigned long long, unsigned> & pathMap,
 
 /* ------------------------------------------------------------------------ */
 
-// get_binary() returns the decimal value of the binary string representing
+// string_to_nary() returns the decimal value of the binary string representing
 // a single system path (fwd and bwd)
 
-unsigned long long get_binary(Path & entry)
+unsigned long long string_to_nary(Path & entry)
 {
     unsigned long long sum = 0;
     unsigned long long pre = 1;
@@ -661,7 +661,7 @@ unsigned long long get_binary(Path & entry)
     // i.e. {010,110} -> 010110 -> 22
 
     if (entry.fwdPath.size() == 0 || entry.bwdPath.size() == 0)
-        throw std::runtime_error("ERROR: Null fwd/bwd vectors encountered in get_binary()\n");
+        throw std::runtime_error("ERROR: Null fwd/bwd vectors encountered in string_to_nary()\n");
 
     for (unsigned pos = entry.bwdPath.size() - 1; pos >= 0; pos--)
     {
@@ -686,10 +686,10 @@ unsigned long long get_binary(Path & entry)
 
 /* ------------------------------------------------------------------------ */
 
-// get_binary(vector<unsigned> &, vector<unsigned> &) is an overloaded
-// version of the get_binary() function, for use in tensor multiplication
+// string_to_nary(vector<unsigned> &, vector<unsigned> &) is an overloaded
+// version of the string_to_nary() function, for use in tensor multiplication
 
-unsigned long long get_binary(vector<unsigned> & fwd, vector<unsigned> & bwd)
+unsigned long long string_to_nary(vector<unsigned> & fwd, vector<unsigned> & bwd)
 {
     unsigned long long sum = 0;
     unsigned long long pre = 1;
