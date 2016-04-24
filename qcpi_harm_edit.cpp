@@ -35,7 +35,7 @@ double action_calc_exact(Path &, std::vector<Mode> &, std::vector<Mode> &,
     SimInfo &);
 
 void sum_paths(std::vector<Path> & pathList, cvector & rho, 
-        Propagator & curr_prop, int step);
+        Propagator & currProp, int step);
 
 // mapping functions
 void map_paths(map<unsigned long long, unsigned> &, 
@@ -43,32 +43,32 @@ void map_paths(map<unsigned long long, unsigned> &,
 unsigned long long get_binary(Path &);
 unsigned long long get_binary(vector<unsigned> &, vector<unsigned> &);
 
-void global_mc_reduce(cvector & rho_local, cvector & rho_global, 
-        SimInfo & simData, MPI_Comm w_comm);
-void print_results(FILE * outfile, SimInfo & simData, cvector & global_rho,
-        std::string config_file, double g_runtime, int nprocs);
+void global_mc_reduce(cvector & rhoLocal, cvector & rhoGlobal, 
+        SimInfo & simData, MPI_Comm worldComm);
+void print_results(FILE * outfile, SimInfo & simData, cvector & globalRho,
+        std::string configFile, double globalRuntime, int nprocs);
 
 int main(int argc, char * argv[])
 {
     // initialize MPI
 MPI_Init(&argc, &argv);
-    MPI_Comm w_comm = MPI_COMM_WORLD;
+    MPI_Comm worldComm = MPI_COMM_WORLD;
 
     int me, nprocs;
 
-    MPI_Comm_rank(w_comm, &me);
-    MPI_Comm_size(w_comm, &nprocs);
+    MPI_Comm_rank(worldComm, &me);
+    MPI_Comm_size(worldComm, &nprocs);
 
     // process arguments, format should be:
-    //      mpirun -n <proc_num> ./prog_name <config_file>
+    //      mpirun -n <proc_num> ./prog_name <configFile>
 
     if (argc < 2)
     {
-        std::string exe_name = argv[0];
-        throw std::runtime_error("Usage: " + exe_name + " <config_file>\n");
+        std::string programName = argv[0];
+        throw std::runtime_error("Usage: " + programName + " <configFile>\n");
     }
 
-    std::string config_file = argv[1];   
+    std::string configFile = argv[1];   
 
     // create structs to hold configuration parameters
 
@@ -81,7 +81,7 @@ MPI_Init(&argc, &argv);
 
     // assign values to config. vars
 
-    simData.startup(config_file, tok);
+    simData.startup(configFile, tok);
 
     if (simData.icTotal < nprocs)
         throw std::runtime_error("Too few ICs for processor number\n");
@@ -118,14 +118,14 @@ MPI_Init(&argc, &argv);
     // initialize RNG
 
     gsl_rng * gen = gsl_rng_alloc(gsl_rng_mt19937);
-    unsigned long s_val = simData.seed * (me+1);
+    unsigned long seedVal = simData.seed * (me+1);
    
     // ensure rng seed is not zero
  
-    if (s_val == 0)
-        s_val = simData.seed + (me+1);
+    if (seedVal == 0)
+        seedVal = simData.seed + (me+1);
 
-    gsl_rng_set(gen, s_val);
+    gsl_rng_set(gen, seedVal);
 
     // prepare the harmonic bath modes
 
@@ -135,15 +135,15 @@ MPI_Init(&argc, &argv);
 
     // create propagator object
 
-    Propagator curr_prop(simData.qmSteps);
+    Propagator currProp(simData.qmSteps);
 
     // EDIT NOTES: (consider using small object/struct here)
 
     // allocate density matrix
     
-    cvector rho_proc;
+    cvector rhoProc;
 
-    rho_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rhoProc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
 
     // initialize path vector
 
@@ -159,7 +159,7 @@ MPI_Init(&argc, &argv);
     // initialize harmonic bath arrays
 
     std::vector<Mode> modes;
-    std::vector<Mode> ref_modes;
+    std::vector<Mode> refModes;
 
     Mode currMode;
 
@@ -169,12 +169,12 @@ MPI_Init(&argc, &argv);
         currMode.c = bath.bathCoup[i];
 
         modes.push_back(currMode);
-        ref_modes.push_back(currMode);
+        refModes.push_back(currMode);
     }
 
     map<unsigned long long, unsigned> pathMap;
 
-    int my_ics = simData.icTotal/nprocs;
+    int myICNum = simData.icTotal/nprocs;
 
     // Following loops are the core computational ones
 
@@ -184,11 +184,11 @@ MPI_Init(&argc, &argv);
     // kmax, this does a full path sum, and for other points,
     // the iterative tensor propagation scheme is used
 
-    for (int ic_curr = 0; ic_curr < my_ics; ic_curr++)
+    for (int currIC = 0; currIC < myICNum; currIC++)
     {
         // zero per-proc rho(t)
 
-        curr_prop.qiAmp.assign(simData.qmSteps, 0.0);
+        currProp.qiAmp.assign(simData.qmSteps, 0.0);
 
         // generate ICs for HOs using MC walk (we use last step's
         // ICs as current step's IC seed)
@@ -210,8 +210,8 @@ MPI_Init(&argc, &argv);
 
         // initialize propagator ICs
 
-        curr_prop.xRef.assign(bath.xVals.begin(), bath.xVals.end());
-        curr_prop.pRef.assign(bath.pVals.begin(), bath.pVals.end());
+        currProp.xRef.assign(bath.xVals.begin(), bath.xVals.end());
+        currProp.pRef.assign(bath.pVals.begin(), bath.pVals.end());
 
         // loop over first kmax time points
 
@@ -228,11 +228,11 @@ MPI_Init(&argc, &argv);
                 {
                     for (int bwd = 0; bwd < DSTATES; bwd++)
                     {
-                        Path incr_path(temp);
-                        incr_path.fwdPath.push_back(fwd);
-                        incr_path.bwdPath.push_back(bwd);
+                        Path incrPath(temp);
+                        incrPath.fwdPath.push_back(fwd);
+                        incrPath.bwdPath.push_back(bwd);
 
-                        tempList.push_back(incr_path);
+                        tempList.push_back(incrPath);
                     }
                 }
             }
@@ -245,9 +245,9 @@ MPI_Init(&argc, &argv);
 
             // select reference state for next timestep
 
-            curr_prop.pick_ref(seg, gen);
+            currProp.pick_ref(seg, gen);
 
-            curr_prop.update(ref_modes, simData);
+            currProp.update(refModes, simData);
 
             // loop over all paths at this time point
 
@@ -262,19 +262,19 @@ MPI_Init(&argc, &argv);
 
                 double phi = 0.0;
 
-                phi = action_calc_exact(pathList[path], modes, ref_modes, simData);
+                phi = action_calc_exact(pathList[path], modes, refModes, simData);
 
                 // EDIT NOTES: (block this into function)
                 // calculate proper rho contribution
 
                 complex<double> kernelAmp = 
-                    curr_prop.get_kernel_prod(pathList[path]);
+                    currProp.get_kernel_prod(pathList[path]);
 
                 pathList[path].product *= kernelAmp * exp(I*phi);
 
             } // end path loop (full path phase)
 
-            sum_paths(pathList, rho_proc, curr_prop, seg);
+            sum_paths(pathList, rhoProc, currProp, seg);
 
             tempList.clear();
 
@@ -320,18 +320,18 @@ MPI_Init(&argc, &argv);
             // using stochastically determined branching
             // and harmonic reference states
 
-            curr_prop.pick_ref(seg, gen);
+            currProp.pick_ref(seg, gen);
 
             // choose branching kmax steps back
 
-            if (curr_prop.oldRefs[seg-simData.kmax] == REF_LEFT)
+            if (currProp.oldRefs[seg-simData.kmax] == REF_LEFT)
                 fRand = bRand = 0;
             else
                 fRand = bRand = 1;
 
             // integrate unforced equations and find U(t)
 
-            curr_prop.update(ref_modes, simData);
+            currProp.update(refModes, simData);
 
             // set up tempList to hold our matrix mult.
             // intermediates
@@ -379,12 +379,12 @@ MPI_Init(&argc, &argv);
 
                         double phi;
 
-                        phi = action_calc_exact(temp, modes, ref_modes, simData);
+                        phi = action_calc_exact(temp, modes, refModes, simData);
 
                         // evaluate tensor element
 
                         complex<double> kernelAmp = 
-                            curr_prop.get_kernel_prod(temp);
+                            currProp.get_kernel_prod(temp);
 
                         tensorProd = kernelAmp * exp(I*phi);
 
@@ -435,7 +435,7 @@ MPI_Init(&argc, &argv);
 
             // pull out current density matrix
 
-            sum_paths(pathList, rho_proc, curr_prop, seg);
+            sum_paths(pathList, rhoProc, currProp, seg);
 
         } // end seg loop (iter. phase)
 
@@ -443,23 +443,23 @@ MPI_Init(&argc, &argv);
 
     // collect timing data
 
-    double local_time = MPI_Wtime() - start;
-    double g_runtime = 0.0;
+    double localRuntime = MPI_Wtime() - start;
+    double globalRuntime = 0.0;
 
-    MPI_Allreduce(&local_time, &g_runtime, 1, MPI_DOUBLE,
-        MPI_MAX, w_comm);
+    MPI_Allreduce(&localRuntime, &globalRuntime, 1, MPI_DOUBLE,
+        MPI_MAX, worldComm);
 
-    cvector global_rho;
+    cvector globalRho;
 
-    global_rho.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    globalRho.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
 
-    global_mc_reduce(rho_proc, global_rho, simData, w_comm);
+    global_mc_reduce(rhoProc, globalRho, simData, worldComm);
 
     // output summary
 
     if (me == 0)
-        print_results(outfile, simData, global_rho, config_file,
-            g_runtime, nprocs);
+        print_results(outfile, simData, globalRho, configFile,
+            globalRuntime, nprocs);
 
     // cleanup
 
@@ -470,11 +470,11 @@ MPI_Init(&argc, &argv);
 
 /* ------------------------------------------------------------------------ */
 
-void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist, 
+void qcpi_update_exact(Path & qmPath, std::vector<Mode> & mlist, 
         SimInfo & simData)
 {
-    double del_t = simData.dt/2.0;
-    double dvr_vals[DSTATES] = {dvrLeft, dvrRight};
+    double delta = simData.dt/2.0;
+    double dvrVals[DSTATES] = {dvrLeft, dvrRight};
 
     for (int mode = 0; mode < simData.bathModes; mode++)
     {
@@ -486,15 +486,15 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
         double x0, xt;
         double p0, pt;
 
-        x0 = qm_path.x0[mode];
-        p0 = qm_path.p0[mode];
+        x0 = qmPath.x0[mode];
+        p0 = qmPath.p0[mode];
 
-        unsigned size = qm_path.fwdPath.size();
+        unsigned size = qmPath.fwdPath.size();
 
-        unsigned splus = qm_path.fwdPath[size-2];
-        unsigned sminus = qm_path.bwdPath[size-2];
+        unsigned splus = qmPath.fwdPath[size-2];
+        unsigned sminus = qmPath.bwdPath[size-2];
 
-        double shift = (dvr_vals[splus] + dvr_vals[sminus])/2.0;
+        double shift = (dvrVals[splus] + dvrVals[sminus])/2.0;
 
         shift *= c/(mass*w*w);
 
@@ -506,13 +506,13 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
         // calculate time evolution for first
         // half of path
 
-        xt = (x0 - shift)*cos(w*del_t) + (p0/(mass*w))*sin(w*del_t) +
+        xt = (x0 - shift)*cos(w*delta) + (p0/(mass*w))*sin(w*delta) +
             shift;
 
-        pt = p0*cos(w*del_t) - mass*w*(x0 - shift)*sin(w*del_t);
+        pt = p0*cos(w*delta) - mass*w*(x0 - shift)*sin(w*delta);
 
-        mlist[mode].phase1 = (x0 - shift)*sin(w*del_t) -
-            (p0/(mass*w))*(cos(w*del_t) - 1.0) + shift*w*del_t;
+        mlist[mode].phase1 = (x0 - shift)*sin(w*delta) -
+            (p0/(mass*w))*(cos(w*delta) - 1.0) + shift*w*delta;
 
         // swap x0, p0 with xt, pt
 
@@ -521,38 +521,38 @@ void qcpi_update_exact(Path & qm_path, std::vector<Mode> & mlist,
 
         // find s vals and shift for second half of trajectory
 
-        splus = qm_path.fwdPath[size-1];
-        sminus = qm_path.bwdPath[size-1];
+        splus = qmPath.fwdPath[size-1];
+        sminus = qmPath.bwdPath[size-1];
 
-        shift = (dvr_vals[splus] + dvr_vals[sminus])/2.0;
+        shift = (dvrVals[splus] + dvrVals[sminus])/2.0;
 
         shift *= c/(mass*w*w);
 
         // calculate time evolution for second
         // half of path
 
-        xt = (x0 - shift)*cos(w*del_t) + (p0/(mass*w))*sin(w*del_t) +
+        xt = (x0 - shift)*cos(w*delta) + (p0/(mass*w))*sin(w*delta) +
             shift;
 
-        pt = p0*cos(w*del_t) - mass*w*(x0 - shift)*sin(w*del_t);
+        pt = p0*cos(w*delta) - mass*w*(x0 - shift)*sin(w*delta);
 
-        mlist[mode].phase2 = (x0 - shift)*sin(w*del_t) -
-            (p0/(mass*w))*(cos(w*del_t) - 1.0) + shift*w*del_t;
+        mlist[mode].phase2 = (x0 - shift)*sin(w*delta) -
+            (p0/(mass*w))*(cos(w*delta) - 1.0) + shift*w*delta;
 
         // update current phase space point
 
-        qm_path.x0[mode] = xt;
-        qm_path.p0[mode] = pt;
+        qmPath.x0[mode] = xt;
+        qmPath.p0[mode] = pt;
 
     } // end mode loop
 }
 
 /* ------------------------------------------------------------------------- */
 
-double action_calc_exact(Path & qm_path, std::vector<Mode> & mlist, 
+double action_calc_exact(Path & qmPath, std::vector<Mode> & mlist, 
         std::vector<Mode> & reflist, SimInfo & simData)
 {
-    double dvr_vals[DSTATES] = {dvrLeft, dvrRight};
+    double dvrVals[DSTATES] = {dvrLeft, dvrRight};
 
     // loop over modes and integrate their action contribution
     // as given by S = c*int{del_s(t')*x(t'), 0, t_final}
@@ -565,12 +565,12 @@ double action_calc_exact(Path & qm_path, std::vector<Mode> & mlist,
 
         // set indices to correct half steps
 
-        unsigned size = qm_path.fwdPath.size();
+        unsigned size = qmPath.fwdPath.size();
 
-        unsigned splus = qm_path.fwdPath[size-2];
-        unsigned sminus = qm_path.bwdPath[size-2];
+        unsigned splus = qmPath.fwdPath[size-2];
+        unsigned sminus = qmPath.bwdPath[size-2];
 
-        double ds = dvr_vals[splus] - dvr_vals[sminus];
+        double ds = dvrVals[splus] - dvrVals[sminus];
         double pre = (mlist[mode].c * ds)/mlist[mode].omega;
 
         // find first half of action sum
@@ -580,10 +580,10 @@ double action_calc_exact(Path & qm_path, std::vector<Mode> & mlist,
 
         // recalculate prefactor
 
-        splus = qm_path.fwdPath[size-1];
-        sminus = qm_path.bwdPath[size-1];
+        splus = qmPath.fwdPath[size-1];
+        sminus = qmPath.bwdPath[size-1];
 
-        ds = dvr_vals[splus] - dvr_vals[sminus];
+        ds = dvrVals[splus] - dvrVals[sminus];
         pre = (mlist[mode].c * ds)/mlist[mode].omega;
 
         // find second half of action sum
@@ -601,7 +601,7 @@ double action_calc_exact(Path & qm_path, std::vector<Mode> & mlist,
 /* ------------------------------------------------------------------------ */
 
 void sum_paths(std::vector<Path> & pathList, cvector & rho, 
-        Propagator & curr_prop, int step)
+        Propagator & currProp, int step)
 {
     if (pathList.begin() == pathList.end())
         return;
@@ -618,7 +618,7 @@ void sum_paths(std::vector<Path> & pathList, cvector & rho,
         rho[step*DSTATES*DSTATES + rindex] += pathList[path].product;
 
         if (rindex == 0)
-            curr_prop.qiAmp[step] += pathList[path].product;
+            currProp.qiAmp[step] += pathList[path].product;
 
     }
 
@@ -633,13 +633,13 @@ void sum_paths(std::vector<Path> & pathList, cvector & rho,
 void map_paths(map<unsigned long long, unsigned> & pathMap, 
     vector<Path> & pathList)
 {
-    unsigned long long bin_val;
+    unsigned long long binVal;
 
     for (unsigned path = 0; path < pathList.size(); path++)
     {
-        bin_val = get_binary(pathList[path]);
+        binVal = get_binary(pathList[path]);
 
-        pathMap[bin_val] = path;
+        pathMap[binVal] = path;
     }
 }
 
@@ -718,36 +718,36 @@ unsigned long long get_binary(vector<unsigned> & fwd, vector<unsigned> & bwd)
 
 /* ------------------------------------------------------------------------ */
 
-void global_mc_reduce(cvector & rho_local, cvector & rho_global, 
-        SimInfo & simData, MPI_Comm w_comm)
+void global_mc_reduce(cvector & rhoLocal, cvector & rhoGlobal, 
+        SimInfo & simData, MPI_Comm worldComm)
 {
-    std::vector<double> rho_real_proc;
-    std::vector<double> rho_imag_proc;
+    std::vector<double> rhoRealProc;
+    std::vector<double> rhoImagProc;
 
-    std::vector<double> rho_real;
-    std::vector<double> rho_imag;
+    std::vector<double> rhoReal;
+    std::vector<double> rhoImag;
 
-    rho_real_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
-    rho_imag_proc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
-    rho_real.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
-    rho_imag.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rhoRealProc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rhoImagProc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rhoReal.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
+    rhoImag.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
 
     for (int i = 0; i < simData.qmSteps; i++)
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
-            rho_real_proc[i*DSTATES*DSTATES+j] = rho_local[i*DSTATES*DSTATES+j].real();
-            rho_imag_proc[i*DSTATES*DSTATES+j] = rho_local[i*DSTATES*DSTATES+j].imag();
+            rhoRealProc[i*DSTATES*DSTATES+j] = rhoLocal[i*DSTATES*DSTATES+j].real();
+            rhoImagProc[i*DSTATES*DSTATES+j] = rhoLocal[i*DSTATES*DSTATES+j].imag();
         }
     }
 
     // Allreduce the real and imaginary arrays
 
-    MPI_Allreduce(&rho_real_proc[0], &rho_real[0], simData.qmSteps*DSTATES*DSTATES,
-        MPI_DOUBLE, MPI_SUM, w_comm);
+    MPI_Allreduce(&rhoRealProc[0], &rhoReal[0], simData.qmSteps*DSTATES*DSTATES,
+        MPI_DOUBLE, MPI_SUM, worldComm);
 
-    MPI_Allreduce(&rho_imag_proc[0], &rho_imag[0], simData.qmSteps*DSTATES*DSTATES,
-        MPI_DOUBLE, MPI_SUM, w_comm);
+    MPI_Allreduce(&rhoImagProc[0], &rhoImag[0], simData.qmSteps*DSTATES*DSTATES,
+        MPI_DOUBLE, MPI_SUM, worldComm);
 
     // scale arrays by Monte Carlo factor
 
@@ -755,8 +755,8 @@ void global_mc_reduce(cvector & rho_local, cvector & rho_global,
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
-            rho_real[i*DSTATES*DSTATES+j] /= simData.icTotal;
-            rho_imag[i*DSTATES*DSTATES+j] /= simData.icTotal;
+            rhoReal[i*DSTATES*DSTATES+j] /= simData.icTotal;
+            rhoImag[i*DSTATES*DSTATES+j] /= simData.icTotal;
         }
     }
 
@@ -768,7 +768,7 @@ void global_mc_reduce(cvector & rho_local, cvector & rho_global,
         {
             int index = i*DSTATES*DSTATES + j;
 
-            rho_global[index] = rho_real[index] + I*rho_imag[index];
+            rhoGlobal[index] = rhoReal[index] + I*rhoImag[index];
         }
     }
 
@@ -776,8 +776,8 @@ void global_mc_reduce(cvector & rho_local, cvector & rho_global,
 
 /* ------------------------------------------------------------------------ */
 
-void print_results(FILE * outfile, SimInfo & simData, cvector & global_rho,
-        std::string config_file, double g_runtime, int nprocs)
+void print_results(FILE * outfile, SimInfo & simData, cvector & globalRho,
+        std::string configFile, double globalRuntime, int nprocs)
 {
         int repeat = 50;
         
@@ -792,8 +792,8 @@ void print_results(FILE * outfile, SimInfo & simData, cvector & global_rho,
         fprintf(outfile, "\n\n");
 
         fprintf(outfile, "Processors: %d\n", nprocs);
-        fprintf(outfile, "Total simulation time: %.3f min\n", g_runtime/60.0);
-        fprintf(outfile, "Configuration file: %s\n\n", config_file.c_str());
+        fprintf(outfile, "Total simulation time: %.3f min\n", globalRuntime/60.0);
+        fprintf(outfile, "Configuration file: %s\n\n", configFile.c_str());
 
         simData.print(outfile, repeat);
 
@@ -811,10 +811,10 @@ void print_results(FILE * outfile, SimInfo & simData, cvector & global_rho,
             for (int i = 0; i < simData.qmSteps; i++)
             {
                 int entry = i*DSTATES*DSTATES;
-                double trace = global_rho[entry].real()+global_rho[entry+3].real(); 
+                double trace = globalRho[entry].real()+globalRho[entry+3].real(); 
 
                 fprintf(outfile, "%7.4f %8.5f %6.3f (Tr = %13.10f)\n", (i+1)*simData.dt, 
-                    global_rho[entry].real(), 0.0, trace);
+                    globalRho[entry].real(), 0.0, trace);
             }
 
 
