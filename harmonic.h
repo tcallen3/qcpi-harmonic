@@ -22,8 +22,6 @@ typedef std::vector<complex<double> > cvector;
 
 namespace qcpiConstNS
 {
-// file buffer size
-const int FLEN = 1024;
 
 // EDIT NOTE: (move to namespace and header)
 // semi-constants (working in a.u.) 

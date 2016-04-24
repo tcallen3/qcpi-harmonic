@@ -658,14 +658,7 @@ unsigned long long get_binary(Path & entry)
     // i.e. {010,110} -> 010110 -> 22
 
     if (entry.fwdPath.size() == 0 || entry.bwdPath.size() == 0)
-    {
-        char err_msg[FLEN];
-
-        sprintf(err_msg, 
-            "ERROR: Null fwd/bwd vectors encountered in get_binary()\n");
-
-        throw std::runtime_error(err_msg);
-    }
+        throw std::runtime_error("ERROR: Null fwd/bwd vectors encountered in get_binary()\n");
 
     for (unsigned pos = entry.bwdPath.size() - 1; pos >= 0; pos--)
     {
