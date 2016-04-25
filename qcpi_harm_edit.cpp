@@ -1,26 +1,8 @@
-/*  qcpi_harmonic.cpp - a program to read in
-    a spectral density in atomic units,
-    calculate the equivalent harmonic bath 
-    modes and couplings, and then run 
-    a full QCPI calculation using this bath;
-    note that this program only uses the 
-    Verlet algorithm to integrate the bath,
-    ensuring consistency with later work. 
-
-    This code uses an iterative method on
-    top of the QCPI calculation, to allow
-    longer time points to be reached without
-    performing the full 2^(2N) path sum 
-
-    It also makes use of the EACP trajectories
-    as a reference state, in the hopes of
-    improving convergence behavior. 
-*/
-
-// NOTE: If we take dvr_left = 1.0 and dvr_right = -1.0,
-//         then the correctly coordinate-shifted states are 
-//         dvr_left = 0.0 and dvr_right = -2.0. Other desired 
-//          shifts can be extrapolated from this example.
+/* This file implements the core QCPI algorithm, creating and
+ * invoking other classes to perform the necessary functions.
+ * It also defines a few functions of its own, for various
+ * path-specific updates
+ */
 
 #include "harmonic.h"
 #include "initial_bath.h"
@@ -29,20 +11,23 @@
 
 using namespace qcpiConstNS;
 
-// QCPI functions
+// QCPI per-path update functions
+
 void qcpi_update(Path &, std::vector<Mode> &, SimInfo &);
 double action_calc(Path &, std::vector<Mode> &, std::vector<Mode> &, 
     SimInfo &);
 
-void sum_paths(std::vector<Path> & pathList, cvector & rho, 
-        Propagator & currProp, int step);
-
 // mapping functions
+
 void map_paths(map<unsigned long long, unsigned> &, 
     vector<Path> &);
 unsigned long long string_to_nary(Path &);
 unsigned long long string_to_nary(vector<unsigned> &, vector<unsigned> &);
 
+// utility functions
+
+void sum_paths(std::vector<Path> & pathList, cvector & rho, 
+        Propagator & currProp, int step);
 void global_mc_reduce(cvector & rhoLocal, cvector & rhoGlobal, 
         SimInfo & simData, MPI_Comm worldComm);
 void print_results(FILE * outfile, SimInfo & simData, cvector & globalRho,
@@ -51,7 +36,8 @@ void print_results(FILE * outfile, SimInfo & simData, cvector & globalRho,
 int main(int argc, char * argv[])
 {
     // initialize MPI
-MPI_Init(&argc, &argv);
+
+    MPI_Init(&argc, &argv);
     MPI_Comm worldComm = MPI_COMM_WORLD;
 
     int me, nprocs;
@@ -59,7 +45,7 @@ MPI_Init(&argc, &argv);
     MPI_Comm_rank(worldComm, &me);
     MPI_Comm_size(worldComm, &nprocs);
 
-    // process arguments, format should be:
+    // process command line args, format should be:
     //      mpirun -n <proc_num> ./prog_name <configFile>
 
     if (argc < 2)
@@ -70,7 +56,7 @@ MPI_Init(&argc, &argv);
 
     std::string configFile = argv[1];   
 
-    // create structs to hold configuration parameters
+    // assign simulation parameters from config file
 
     SimInfo simData;
 
@@ -78,8 +64,6 @@ MPI_Init(&argc, &argv);
     boost::char_separator<char> sep(delimiters);
     std::string emptyString = "";
     Tokenizer tok(emptyString, sep);
-
-    // assign values to config. vars
 
     simData.startup(configFile, tok);
 
@@ -102,7 +86,7 @@ MPI_Init(&argc, &argv);
         }
     }
 
-    // begin timing calculation
+    // begin timing this run
 
     double start = MPI_Wtime();
 
@@ -113,7 +97,6 @@ MPI_Init(&argc, &argv);
 
     if (simData.icTotal < nprocs)
         throw std::runtime_error("Too few ICs for processor group\n");
-
 
     // initialize RNG
 
@@ -137,23 +120,23 @@ MPI_Init(&argc, &argv);
 
     Propagator currProp(simData.qmSteps);
 
-    // EDIT NOTES: (consider using small object/struct here)
-
     // allocate density matrix
     
     cvector rhoProc;
 
     rhoProc.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
 
-    // initialize path vector
+    // initialize path vector and create default path
 
     vector<Path> pathList;
     vector<Path> tempList;
 
     Path pstart;
 
-    pstart.fwdPath.push_back(0);   // left-localized
-    pstart.bwdPath.push_back(0);   // left-localized
+    // path choice assumes donor-localized rho(0)
+
+    pstart.fwdPath.push_back(0);  
+    pstart.bwdPath.push_back(0); 
     pstart.product = 1.0;
 
     // initialize harmonic bath arrays
@@ -186,18 +169,15 @@ MPI_Init(&argc, &argv);
 
     for (int currIC = 0; currIC < myICNum; currIC++)
     {
-        // zero per-proc rho(t)
+        // zero per-proc rho amplitude
 
         currProp.qiAmp.assign(simData.qmSteps, 0.0);
 
-        // generate ICs for HOs using MC walk (we use last step's
-        // ICs as current step's IC seed)
+        // generate ICs from MC walk 
 
         bath.ic_gen(gen, simData);
 
-        // for time points < kmax
-
-        // loop over kmax segments of fwd/bwd paths
+        // initialize bath coordinates and path vector
 
         pathList.clear();
         pathMap.clear();
@@ -213,12 +193,11 @@ MPI_Init(&argc, &argv);
         currProp.xRef.assign(bath.xVals.begin(), bath.xVals.end());
         currProp.pRef.assign(bath.pVals.begin(), bath.pVals.end());
 
-        // loop over first kmax time points
+        // loop over first kmax time points, direct path summation
 
         for (int seg = 0; seg < simData.kmax; seg++)
         {
-            // EDIT NOTES: (this block seems good candidate for function)
-            // grow path list vector with child paths
+            // grow path list vector to include all branches
 
             for (unsigned path = 0; path < pathList.size(); path++)
             {
@@ -241,20 +220,19 @@ MPI_Init(&argc, &argv);
             tempList.swap(pathList);
             tempList.clear();
 
-            // run unforced trajectory and integrate U(t)
-
             // select reference state for next timestep
 
             currProp.pick_ref(seg, gen);
 
+            // run unforced trajectory and integrate U(t)
+
             currProp.update(refModes, simData);
 
-            // loop over all paths at this time point
+            // update oscillators associated with each path and find actions
 
             for (unsigned path = 0; path < pathList.size(); path++)
             { 
                 // calculate x(t) and p(t) at integration points
-                // along all paths
 
                 qcpi_update(pathList[path], modes, simData);
 
@@ -264,27 +242,23 @@ MPI_Init(&argc, &argv);
 
                 phi = action_calc(pathList[path], modes, refModes, simData);
 
-                // EDIT NOTES: (block this into function)
-                // calculate proper rho contribution
+                // calculate rho contribution for this path
 
                 complex<double> kernelAmp = 
                     currProp.get_kernel_prod(pathList[path]);
 
                 pathList[path].product *= kernelAmp * exp(I*phi);
 
-            } // end path loop (full path phase)
+            } 
 
             sum_paths(pathList, rhoProc, currProp, seg);
 
             tempList.clear();
 
-        } // end seg loop (full path phase)
-
-        // EDIT NOTES: (be more explicit about how this works?)
+        } 
 
         // slide paths forward one step, i.e. (010) -> (10)
-        // note that our system IC means we only
-        // have 1/4 of all paths, or this would // need to be handled with full T matrix as below
+        // this removes memory of localized rho(0)
 
         vector<unsigned> tPath;
 
@@ -301,28 +275,22 @@ MPI_Init(&argc, &argv);
             pathList[path].bwdPath.swap(tPath);
         }
 
-
         // map paths to vector location
 
         map_paths(pathMap, pathList);
 
-        // loop over time points beyond kmax
-        // and propagate system iteratively
+        // loop over time points beyond kmax and propagate iteratively
 
         for (int seg = simData.kmax; seg < simData.qmSteps; seg++)
         {
-            // choose branch to propagate on stochastically,
-            // based on state of system at start of memory span
-
             unsigned fRand = static_cast<unsigned>(gsl_rng_uniform_int(gen,DSTATES));
             unsigned bRand = static_cast<unsigned>(gsl_rng_uniform_int(gen,DSTATES));
 
-            // using stochastically determined branching
-            // and harmonic reference states
+            // choose reference state for this step
 
             currProp.pick_ref(seg, gen);
 
-            // choose branching kmax steps back
+            // choose branching consistent with previous dynamics (DCSH)
 
             if (currProp.oldRefs[seg-simData.kmax] == REF_LEFT)
                 fRand = bRand = 0;
@@ -333,8 +301,7 @@ MPI_Init(&argc, &argv);
 
             currProp.update(refModes, simData);
 
-            // set up tempList to hold our matrix mult.
-            // intermediates
+            // set up tempList to hold iteration intermediates
 
             tempList.clear();
             tempList = pathList;
@@ -343,10 +310,6 @@ MPI_Init(&argc, &argv);
                 tempList[tp].product = 0.0;
 
             // loop over paths to construct tensor contributions
-            // in this loop, path variable indexes the input path array
-            // since this contains data used to extend path one step
-
-            // fix size of path so any additions aren't double-counted            
 
             unsigned currSize = pathList.size();
     
@@ -355,7 +318,7 @@ MPI_Init(&argc, &argv);
                 complex<double> tensorProd;
 
                 // loop over all pairs of fwd/bwd system states
-                // to generate next step element
+                // to generate next path extension
 
                 for (int fwd = 0; fwd < DSTATES; fwd++)
                 {
@@ -371,7 +334,6 @@ MPI_Init(&argc, &argv);
                         temp.bwdPath.push_back(bwd);
 
                         // calculate x(t) and p(t) at integration points
-                        // along new path (note this changes x0, p0 in temp)
 
                         qcpi_update(temp, modes, simData);
 
@@ -400,17 +362,17 @@ MPI_Init(&argc, &argv);
                         btemp.assign(temp.bwdPath.begin()+1, 
                             temp.bwdPath.end() );
 
+                        // find path dictated by tensor update in array
+
                         unsigned long long target = string_to_nary(ftemp, btemp);
-                        
-                        // check to see if target path is in list
 
                         unsigned outPath = pathMap[target];
 
-                        // path is already present in list, so update it
+                        // add tensor product to correct element
 
                         tempList[outPath].product += tensorProd * temp.product;
         
-                        // update ICs if we have correct donor element
+                        // update ICs if we have correct path element
 
                         if (temp.fwdPath[0] == fRand && temp.bwdPath[0] == bRand)
                         {
@@ -449,6 +411,8 @@ MPI_Init(&argc, &argv);
     MPI_Allreduce(&localRuntime, &globalRuntime, 1, MPI_DOUBLE,
         MPI_MAX, worldComm);
 
+    // reduce rho(t) across processors
+
     cvector globalRho;
 
     globalRho.assign(DSTATES*DSTATES*simData.qmSteps, 0.0);
@@ -472,6 +436,9 @@ MPI_Init(&argc, &argv);
 }
 
 /* ------------------------------------------------------------------------ */
+
+// qcpi_update() evolves the harmonic oscillator modes based on the system
+// states encoded in the current path list
 
 void qcpi_update(Path & qmPath, std::vector<Mode> & mlist, 
         SimInfo & simData)
@@ -500,9 +467,6 @@ void qcpi_update(Path & qmPath, std::vector<Mode> & mlist,
         double shift = (dvrVals[splus] + dvrVals[sminus])/2.0;
 
         shift *= c/(mass*w*w);
-
-        // clear out any old trajectory info
-        // might be more efficient just to overwrite
 
         mlist[mode].xt.clear();
 
@@ -552,13 +516,15 @@ void qcpi_update(Path & qmPath, std::vector<Mode> & mlist,
 
 /* ------------------------------------------------------------------------- */
 
+// action_calc() computes the residual action contributed by each path to the
+// summation after accounting for the action of the bath reference trajectory
+
 double action_calc(Path & qmPath, std::vector<Mode> & mlist, 
         std::vector<Mode> & reflist, SimInfo & simData)
 {
     double dvrVals[DSTATES] = {dvrLeft, dvrRight};
 
     // loop over modes and integrate their action contribution
-    // as given by S = c*int{del_s(t')*x(t'), 0, t_final}
 
     double action = 0.0;
 
@@ -603,6 +569,9 @@ double action_calc(Path & qmPath, std::vector<Mode> & mlist,
 
 /* ------------------------------------------------------------------------ */
 
+// sum_paths() is a helper function which adds the contribution of each
+// path amplitude to the total rho(t) value at each time point
+
 void sum_paths(std::vector<Path> & pathList, cvector & rho, 
         Propagator & currProp, int step)
 {
@@ -622,7 +591,6 @@ void sum_paths(std::vector<Path> & pathList, cvector & rho,
 
         if (rindex == 0)
             currProp.qiAmp[step] += pathList[path].product;
-
     }
 
 }
@@ -661,7 +629,13 @@ unsigned long long string_to_nary(Path & entry)
     // i.e. {010,110} -> 010110 -> 22
 
     if (entry.fwdPath.size() == 0 || entry.bwdPath.size() == 0)
-        throw std::runtime_error("ERROR: Null fwd/bwd vectors encountered in string_to_nary()\n");
+    {
+        std::string err_msg = 
+            "ERROR: Null fwd/bwd vectors encountered in string_to_nary()\n";
+        throw std::runtime_error(err_msg);
+    }
+
+    // backward path forms least significant bit set
 
     for (unsigned pos = entry.bwdPath.size() - 1; pos >= 0; pos--)
     {
@@ -671,6 +645,8 @@ unsigned long long string_to_nary(Path & entry)
         if (pos == 0)
             break;
     }
+
+    // forward path corresponds to most significant bits
 
     for (unsigned pos = entry.fwdPath.size() - 1; pos >= 0; pos--)
     {
@@ -721,6 +697,11 @@ unsigned long long string_to_nary(vector<unsigned> & fwd, vector<unsigned> & bwd
 
 /* ------------------------------------------------------------------------ */
 
+// global_mc_reduce() is a helper function which handles the MPI calls needed
+// to add up the Monte Carlo contributions to rho(t) from each processor and
+// normalize them. It is somewhat complicated by the lack of a natural complex
+// type for MPI reduction.
+
 void global_mc_reduce(cvector & rhoLocal, cvector & rhoGlobal, 
         SimInfo & simData, MPI_Comm worldComm)
 {
@@ -739,8 +720,11 @@ void global_mc_reduce(cvector & rhoLocal, cvector & rhoGlobal,
     {
         for (int j = 0; j < DSTATES*DSTATES; j++)
         {
-            rhoRealProc[i*DSTATES*DSTATES+j] = rhoLocal[i*DSTATES*DSTATES+j].real();
-            rhoImagProc[i*DSTATES*DSTATES+j] = rhoLocal[i*DSTATES*DSTATES+j].imag();
+            rhoRealProc[i*DSTATES*DSTATES+j] = 
+                rhoLocal[i*DSTATES*DSTATES+j].real();
+
+            rhoImagProc[i*DSTATES*DSTATES+j] = 
+                rhoLocal[i*DSTATES*DSTATES+j].imag();
         }
     }
 
@@ -778,6 +762,10 @@ void global_mc_reduce(cvector & rhoLocal, cvector & rhoGlobal,
 }
 
 /* ------------------------------------------------------------------------ */
+
+// print_results() is a helper function which summarizes the simulation and
+// presents the final rho(t) values for plotting and analysis in simple
+// column-wise format
 
 void print_results(FILE * outfile, SimInfo & simData, cvector & globalRho,
         std::string configFile, double globalRuntime, int nprocs)
