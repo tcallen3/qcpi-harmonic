@@ -11,8 +11,6 @@ using namespace qcpiConstNS;
 
 SimInfo::SimInfo()
 {
-    // initialize some variables
-
     qmstepsflg = false;
     qmdtflg = false;
     bathtempflg = false;
@@ -21,15 +19,20 @@ SimInfo::SimInfo()
     inflg = false;
     outflg = false;
 
+    // assign some default values to variables
+
     asym = 0.5;             // system asymmetry (in kcal/mol)
     bathModes = 60;         // number of bath oscillators
     mcSteps = 50000;        // default Monte Carlo burn
-    chunks = 5;             // must evenly divide step_pts
-    rhoSteps = 100;         // points used to integrate U(t)
+    chunks = 5;             // number of sub-divisions for U(t) integration
+    rhoSteps = 100;         // points used to integrate U(t) in each division
     seed = 179524;          // RNG seed for consistency
 }
 
 /* ------------------------------------------------------------------------- */
+
+// startup() invokes the functions to parse the simulation configuration file,
+// as well as checking that all required variables have been assigned
 
 void SimInfo::startup(std::string config, Tokenizer & tok)
 {
@@ -81,7 +84,7 @@ void SimInfo::startup(std::string config, Tokenizer & tok)
         }
     }
 
-    // set additional parameters
+    // calculate derived parameters
 
     rhoDelta = dt/chunks;
     asym *= kcalToHartree;
@@ -100,6 +103,11 @@ void SimInfo::startup(std::string config, Tokenizer & tok)
 } 
 
 /* ------------------------------------------------------------------------- */
+
+// parse_file() reads through the configuration file and sets simulation
+// parameters according to the values found there. The assumed form of the file
+// is a list of whitespace separated command labels and values for the 
+// corresponding variables.
 
 void SimInfo::parse_file(std::string config, Tokenizer & tok)
 {
@@ -144,7 +152,7 @@ void SimInfo::parse_file(std::string config, Tokenizer & tok)
 
         arg2 = *iter;
 
-        // execute logic on tokens (normalize case?)
+        // execute logic on tokens 
 
         if (arg1 == "rho_steps")
             rhoSteps = boost::lexical_cast<int>(arg2);
@@ -229,7 +237,9 @@ void SimInfo::parse_file(std::string config, Tokenizer & tok)
                 seed = 179524;
         }
 
-        else    // skip unrecognized commands and weird lines
+        // skip unrecognized commands and weird lines
+
+        else    
             continue;
     }
 
@@ -237,6 +247,10 @@ void SimInfo::parse_file(std::string config, Tokenizer & tok)
 }
 
 /* ------------------------------------------------------------------------- */
+
+// sanity_check() ensures that parameter values set in the configuration file
+// are logically meaningful for a given QCPI instance, mostly this involves
+// bounds checking
 
 void SimInfo::sanity_check()
 {
@@ -284,6 +298,9 @@ void SimInfo::sanity_check()
 }
 
 /* ------------------------------------------------------------------------- */
+
+// print_vars() reports values of important simulation parameters to the 
+// provided output file, with the goal of improving reproducibility of runs
 
 void SimInfo::print_vars(FILE * outfile, int repeat)
 {
@@ -335,5 +352,3 @@ void SimInfo::print_vars(FILE * outfile, int repeat)
 }
 
 /* ------------------------------------------------------------------------- */
-
-
