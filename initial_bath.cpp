@@ -25,6 +25,10 @@ InitialBath::InitialBath(unsigned modes)
 
 /* ------------------------------------------------------------------------- */
 
+// read_spec() parses a discrete spectral density file to initialize the
+// frequencies and couplings of the bath oscillators. The file is assumed to
+// be in the format of whitespace separated frequency and J(w)/w values.
+
 void InitialBath::read_spec(std::string specName, std::vector<double> & omega, 
     std::vector<double> & jvals, Tokenizer & tok)
 {
@@ -58,9 +62,11 @@ void InitialBath::read_spec(std::string specName, std::vector<double> & omega,
         if (entry[0] == commentChar)
             continue;
 
+        // first column is frequency
+
         omega.push_back(boost::lexical_cast<double>(entry));
 
-        // assign arguments
+        // check for bad entries
 
         ++iter;
 
@@ -69,23 +75,29 @@ void InitialBath::read_spec(std::string specName, std::vector<double> & omega,
 
         entry = *iter;
 
+        // second column is J(w)/w
+
         jvals.push_back(boost::lexical_cast<double>(entry)); 
 
-    } // end specden reading
+    } 
 
     specFile.close();
 }
 
 /* ------------------------------------------------------------------------- */
 
+// process_step() performs basic Monte Carlo updates on the bath positions and
+// momenta, moving through phase space one dimension at a time, as specified
+// by the index variable.
+
 int InitialBath::process_step(unsigned index, double beta, gsl_rng * gen)
 {
     double prob = dist(index, beta);
     int accepted = 0;
 
-    if (prob >= 1.0) // accept
+    if (prob >= 1.0) 
     {
-        // update state
+        // accept step and update state
 
         xOld = xNew;     
         pOld = pNew;
@@ -99,9 +111,9 @@ int InitialBath::process_step(unsigned index, double beta, gsl_rng * gen)
     {    
         double xi = gsl_rng_uniform(gen);
     
-        if (prob >= xi) // accept (rescue)
+        if (prob >= xi) 
         {    
-            // update state
+            // accept on coin flip and update state
 
             xOld = xNew;     
             pOld = pNew;
@@ -113,6 +125,8 @@ int InitialBath::process_step(unsigned index, double beta, gsl_rng * gen)
         }
         else
         {
+            // reject step
+
             xPick = xOld;
             pPick = pOld;
         }
@@ -123,20 +137,19 @@ int InitialBath::process_step(unsigned index, double beta, gsl_rng * gen)
 
 /* ------------------------------------------------------------------------- */
 
+// dist() calculates the ratio of Wigner distribution values for a trial
+// step in the Monte Carlo walk
+
 double InitialBath::dist(unsigned index, double beta)
 {
-    // need atomic units    
-
     double omega = bathFreq[index];
     double coup = bathCoup[index];
 
     double f = hbar*omega*beta;
 
-    // shift to DVR state w/ -1 element in sigma_z basis
+    // shift the bath coordinates to reflect system-bath equilibrium
 
     double lambda = dvrLeft * coup * ( 1.0/(mass*omega*omega) );
-
-    // shifting distribution for equilibrium
 
     double xNewShift = xNew - lambda;
     double xOldShift = xOld - lambda;
@@ -154,6 +167,10 @@ double InitialBath::dist(unsigned index, double beta)
 
 /* ------------------------------------------------------------------------- */
 
+// bath_setup() initializes the bath frequencies and coupling constants based
+// on a logarithmic discretization of the input spectral density (assumed to
+// be in the form of J(w)/w)
+
 void InitialBath::bath_setup(SimInfo & simData, Tokenizer & tok, gsl_rng * gen, 
         int myRank)
 {
@@ -165,8 +182,9 @@ void InitialBath::bath_setup(SimInfo & simData, Tokenizer & tok, gsl_rng * gen,
     read_spec(simData.inputName, omega, jvals, tok);
 
     // first calculate reorg energy via simple integration
+    // assumes uniform spacing in frequency
 
-    double dw = omega[1] - omega[0];    // assumes uniform spacing
+    double dw = omega[1] - omega[0];    
     double sum = 0.0;
 
     sum += (jvals.front() + jvals.back())/2.0;
@@ -178,7 +196,7 @@ void InitialBath::bath_setup(SimInfo & simData, Tokenizer & tok, gsl_rng * gen,
 
     double w0 = sum/numModes;
 
-    // report reorg energy to command line
+    // report reorg energy to command line as simple error check
 
     double pi = acos(-1.0);
     double reorg = 4.0 * sum / pi;
@@ -186,7 +204,8 @@ void InitialBath::bath_setup(SimInfo & simData, Tokenizer & tok, gsl_rng * gen,
     if (myRank == 0)
         fprintf(stdout, "Reorg. energy (au): %.7f\n", reorg);
 
-    // discretize frequencies
+    // discretize frequencies so that normalized integral up to
+    // w[i] equals i
 
     for (unsigned j = 0; j < numModes; j++)
     {
@@ -202,7 +221,7 @@ void InitialBath::bath_setup(SimInfo & simData, Tokenizer & tok, gsl_rng * gen,
         bathFreq[j] = omega[i];
     }
 
-    // check modes for 0 vals (may create workaround)
+    // check modes for 0 vals (in case input file is sparse)
 
     for (unsigned i = 0; i < numModes; i++)
     {
@@ -222,21 +241,35 @@ void InitialBath::bath_setup(SimInfo & simData, Tokenizer & tok, gsl_rng * gen,
         }
     }
 
+    // calculate couplings from bath frequencies
+
     for (unsigned i = 0; i < numModes; i++)
         bathCoup[i] = sqrt(2.0*w0/pi) * bathFreq[i];
+
+    // determine optimal step sizes for MC walk
 
     calibrate_mc(gen, simData);
 }
 
 /* ------------------------------------------------------------------------- */
 
+// calibrate_mc() is a helper function which determines optimal phase space
+// MC steps for each bath oscillator by trial and error
+
 void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 {
+    // set maximum trial number to bound initialization time
+
     const double maxTrials = 1000;
+
     const double baseStep = 10.0;
     const double scale = 0.8;
+
+    // establish bounds of acceptance ratio on optimization
+
     const double lowThresh = 0.45;
     const double highThresh = 0.55;
+
     const int iterCount = 1000;
     std::vector<double> xCurr;
     std::vector<double> pCurr;
@@ -244,7 +277,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
     xCurr.assign(numModes, 0.0);
     pCurr.assign(numModes, 0.0);
 
-    // initialize step sizes and (x,p) at minimum of x
+    // initialize step sizes and (x,p) at minimum of coupled system-bath
 
     for (unsigned i = 0; i < numModes; i++)
     {
@@ -260,13 +293,13 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
     int accepted;
 
-    // run MC step tweaking for each mode and phase space dim. separately
+    // run MC trials, modifying steps in each dimension independently
 
     for (unsigned i = 0; i < numModes; i++)
     {
         int count = 0;
 
-        while (count <= maxTrials)    // keep looping until convergence
+        while (count <= maxTrials)    
         {
             xOld = xCurr[i];
             pOld = pCurr[i];
@@ -294,11 +327,17 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
             // check ratio for convergence
 
-            if (ratio >= lowThresh && ratio <= highThresh)    // step is good
+            if (ratio >= lowThresh && ratio <= highThresh)    
                 break;
-            else if (ratio < lowThresh)                // step too large, decrease
+
+            // step is too large
+
+            else if (ratio < lowThresh)                
                 xStep[i] *= scale;
-            else                                 // step too small, increase
+
+            // step is too small
+
+            else                                 
                 xStep[i] /= scale;    
     
             count++;
@@ -320,13 +359,13 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
         pCurr[i] = 0.0;
     }
 
-    // run MC step tweaking for each mode 
+    // run MC trials, modifying steps in each dimension independently
 
     for (unsigned i = 0; i < numModes; i++)
     {
         int count = 0;
 
-        while (count <= maxTrials)    // keep looping until convergence
+        while (count <= maxTrials)    
         {
             xOld = xCurr[i];
             pOld = pCurr[i];
@@ -354,11 +393,17 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
             // check ratio for convergence
 
-            if (ratio >= lowThresh && ratio <= highThresh)    // step is good
+            if (ratio >= lowThresh && ratio <= highThresh)   
                 break;
-            else if (ratio < lowThresh)                // step too large, decrease
+
+            // step is too large
+
+            else if (ratio < lowThresh)               
                 pStep[i] *= scale;
-            else                                 // step too small, increase
+
+            // step is too small
+
+            else                                 
                 pStep[i] /= scale;    
     
             count++;
@@ -370,7 +415,7 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 
     } // end p calibration
 
-    // initialize IC arrays
+    // initialize IC arrays for future runs
 
     for (int i = 0; i < simData.bathModes; i++)
     {
@@ -390,6 +435,9 @@ void InitialBath::calibrate_mc(gsl_rng * gen, SimInfo & simData)
 }
 
 /* ------------------------------------------------------------------------- */
+
+// ic_gen() performs a Monte Carlo walk using the optimized step sizes to
+// generate sample points in the bath phase space for the QCPI algorithm
 
 void InitialBath::ic_gen(gsl_rng * gen, SimInfo & simData)
 {

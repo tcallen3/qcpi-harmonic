@@ -23,6 +23,9 @@ Propagator::Propagator(int qmSteps)
 
 /* ------------------------------------------------------------------------- */
 
+// pick_ref() selects the reference state for the next QCPI iteration based
+// on the local density matrix amplitude, in accord with the DCSH algorithm
+
 void Propagator::pick_ref(int seg, gsl_rng * gen)
 {
     double xi = gsl_rng_uniform(gen);
@@ -48,6 +51,9 @@ void Propagator::pick_ref(int seg, gsl_rng * gen)
 
 /* ------------------------------------------------------------------------- */
 
+// get_kernel_prod() finds the current propagator product required in the
+// iteration of rho(t) from rho(t-dt), based on the forward and backward paths
+
 complex<double> Propagator::get_kernel_prod(const Path & path)
 {
     unsigned size = path.fwdPath.size();
@@ -67,9 +73,12 @@ complex<double> Propagator::get_kernel_prod(const Path & path)
 
 /* ------------------------------------------------------------------------- */
 
+// update() evolves the harmonic bath and recalculates U(t) for each new
+// iteration, based on the reference state chosen for this step
+
 void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
 {
-    // run unforced trajectory and integrate U(t)
+    // reset U(t) to identity as inital matrix
 
     for (int i = 0; i < matLen; i++)
     {
@@ -82,13 +91,12 @@ void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
         }
     }
 
-    // first find unforced (x,p)
-    // note that bath_update clears ref_modes x(t) and p(t) list
+    // update bath oscillators using reference state
 
     bath_update(refModes, simData);
 
-    // chunk trajectory into pieces for greater
-    // accuracy in integrating U(t)
+    // sample energies along quantum time step and integrate U(t)
+    // using piece-wise constant hamiltonian
 
     for (int chunkNum = 0; chunkNum < simData.chunks; chunkNum++)
     {
@@ -96,12 +104,9 @@ void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
             
         build_hamiltonian(refModes, chunkNum, simData);
 
-        // integrate TDSE for U(t) w/ piece-wise constant
-        // Hamiltonian approx.
+        // integrate TDSE for U(t) w/ piece-wise constant H(x,p)
 
         ode_solve(0.0, simData.rhoDelta, simData.rhoSteps);
-
-        // swap out true and temp pointers
 
         prop.swap(ptemp);
     } 
@@ -109,6 +114,10 @@ void Propagator::update(std::vector<Mode> & refModes, SimInfo & simData)
 }
 
 /* ------------------------------------------------------------------------- */
+
+// bath_update() evolves all the bath oscillators according to the selected
+// system reference state, using closed form solutions for forced harmonic
+// oscillators
 
 void Propagator::bath_update(std::vector<Mode> & mlist, SimInfo & simData)
 {
@@ -125,22 +134,16 @@ void Propagator::bath_update(std::vector<Mode> & mlist, SimInfo & simData)
 
         double shift = (refState * c)/(mass * w * w);
 
-        // first calculated x(t) at time points
-        // for propagator integration
-
-        // clear out any old trajectory info
-        // might be more efficient just to overwrite
-
         mlist[mode].xt.clear();
 
-        // set up ICs for chunk calc
+        // set up ICs for each subinterval
 
         x0 = xRef[mode];
         p0 = pRef[mode];
         
         for (int i = 0; i < simData.chunks; i++)
         {
-            // find x(t) at chunk time points
+            // find coordinates at interval time points
 
             xt = (x0 - shift)*cos(w*chunkDelta) + 
                 (p0/(mass*w))*sin(w*chunkDelta) + shift;
@@ -154,13 +157,13 @@ void Propagator::bath_update(std::vector<Mode> & mlist, SimInfo & simData)
             p0 = pt;
         }
 
-        // set up ICs for trajectory
+        // set up ICs for trajectory step from 0 to dt
 
         x0 = xRef[mode];
         p0 = pRef[mode];
 
-        // calculate time-evolved x(t), p(t) for
-        // first half-step of trajectory
+        // calculate time-evolved x(t), p(t) for first half-step
+        // (using half-steps to match phases with full QCPI update functions)
 
         xt = (x0 - shift)*cos(w*delta) + (p0/(mass*w))*sin(w*delta) + shift;
 
@@ -174,8 +177,7 @@ void Propagator::bath_update(std::vector<Mode> & mlist, SimInfo & simData)
         x0 = xt;
         p0 = pt;
 
-        // calculate time-evolved x(t), p(t) for
-        // second half-step of trajectory
+        // calculate time-evolved x(t), p(t) for second half-step
 
         xt = (x0 - shift)*cos(w*delta) + (p0/(mass*w))*sin(w*delta) + shift;
 
@@ -184,26 +186,25 @@ void Propagator::bath_update(std::vector<Mode> & mlist, SimInfo & simData)
         mlist[mode].phase2 = (x0 - shift)*sin(w*delta) - 
             (p0/(mass*w))*(cos(w*delta)-1.0) + shift*w*delta;
 
-        // update current phase space point
+        // update oscillator coordinates
 
         xRef[mode] = xt;
         pRef[mode] = pt;
 
-    } // end mode loop
+    } 
 }
 
 /* ------------------------------------------------------------------------- */
 
-// construct system-bath Hamiltonian for
-// current timestep
+// build_hamiltonian() constructs the piece-wise constant Hamiltonians used
+// to propagate U(t) during each QCPI time step, based on the system-bath 
+// energetics along the reference trajectory
 
 void Propagator::build_hamiltonian(std::vector<Mode> & modes, int chunk, 
         SimInfo & simData)
 {
-    // copy off-diagonal from anharmonic code
     const double offDiag = hbar*tlsFreq;
 
-    // store system and system-bath coupling contributions separately
     std::vector<complex<double> > systemMat;
     std::vector<complex<double> > bathMat;
 
@@ -215,9 +216,7 @@ void Propagator::build_hamiltonian(std::vector<Mode> & modes, int chunk,
     dvrVals.push_back(dvrLeft);
     dvrVals.push_back(dvrRight);
 
-    // system matrix is just splitting and any asymmetry
-    // note that signs should be standard b/c I'm using
-    // (-1,+1) instead of (+1,-1)
+    // system matrix corresponds to simple asymmetric TLS
 
     for (int i = 0; i < matLen; i++)
     {
@@ -230,7 +229,7 @@ void Propagator::build_hamiltonian(std::vector<Mode> & modes, int chunk,
         }
     }
 
-    // system-bath matrix includes bi-linear coupling 
+    // system-bath interaction includes bi-linear coupling 
 
     std::vector<double> energies;
 
@@ -249,6 +248,8 @@ void Propagator::build_hamiltonian(std::vector<Mode> & modes, int chunk,
         }
     }
 
+    // these interactions are all diagonal
+
     for (int i = 0; i < matLen; i++)
         bathMat[i*matLen+i] = energies[i];
 
@@ -264,11 +265,12 @@ void Propagator::build_hamiltonian(std::vector<Mode> & modes, int chunk,
         }
     }
 
-} // end build_hamiltonian()
+} 
 
 /* ------------------------------------------------------------------------ */
 
-// propagator evolution
+// prop_eqns() encodes the time-dependent Schroedinger equation for the
+// ODE integration functions
 
 void Propagator::prop_eqns(cvector & y, cvector & dydt)
 {
@@ -289,11 +291,8 @@ void Propagator::prop_eqns(cvector & y, cvector & dydt)
 
 /* ------------------------------------------------------------------------ */
 
-/* rk4() implements a vanilla fourth-order Runge-Kutta ODE solver, 
-although this version has been tweaked to use complex numbers, since
-robust complex libraries are hard to find. The derivs fn pointer specifies
-the function that will define the ODE equations, and the params array is
-included for extra flexibility, as per GSL */
+// ode_step() handles 4th order Runge-Kutta integration of U(t) at each
+// step of the sub-divided dt value
 
 void Propagator::ode_step(cvector & yin, double dt, cvector & yout)
 {
@@ -344,10 +343,8 @@ void Propagator::ode_step(cvector & yin, double dt, cvector & yout)
 
 /* ------------------------------------------------------------------------ */
 
-/* rkdriver() is an abstraction level that lets different integrators
-run using more or less the same input, it initializes some things and
-then simply calls the underlying function in a loop; we don't really use
-it much, but it was part of the NR approach so it got rolled in here */
+// ode_solve() handles setup and iteration of the 4th order Runge-Kutta
+// solver used to evaluate U(t) during each time step
 
 void Propagator::ode_solve(double tstart, double tend, int nsteps)
 {
